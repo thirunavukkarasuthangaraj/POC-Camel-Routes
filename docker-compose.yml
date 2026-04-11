@@ -1,0 +1,78 @@
+version: '3.8'
+
+# ════════════════════════════════════════════════════════════
+# PAS-SCADA-Kafka-Bridge — Local Test Environment
+#
+# Starts all 3 servers locally so you can test without
+# connecting to the real Pink Line servers.
+#
+# Run:  docker-compose up -d
+# Stop: docker-compose down
+# ════════════════════════════════════════════════════════════
+
+services:
+
+  # ── ActiveMQ Artemis (replaces 10.12.1.13:61616) ──────────
+  # TMS publishes XML to topics on this broker.
+  # In test: we publish test XML manually.
+  artemis:
+    image: apache/activemq-artemis:2.31.2
+    container_name: test-artemis
+    ports:
+      - "61616:61616"    # OpenWire (our app connects here)
+      - "8161:8161"      # Web console (open in browser to see messages)
+    environment:
+      ARTEMIS_USER: pasbridge
+      ARTEMIS_PASSWORD: testpass123
+      ANONYMOUS_LOGIN: "false"
+    volumes:
+      - artemis-data:/var/lib/artemis-instance
+
+  # ── Apache Kafka (Bala confirmed: use Kafka) ───────────────
+  # Our app publishes encrypted messages to Kafka topic.
+  # Needs Zookeeper to run.
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: test-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: test-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"      # Our app connects here
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"   # auto-creates tms.scada.encrypted
+
+  # ── RabbitMQ (client already uses this) ───────────────────
+  # Our app forwards encrypted messages here.
+  # MQTT plugin enabled so SCADA API can connect.
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: test-rabbitmq
+    ports:
+      - "5672:5672"      # AMQP (our app connects here)
+      - "1883:1883"      # MQTT (SCADA API connects here — port 8883 in prod with TLS)
+      - "15672:15672"    # Web console (open in browser to see messages)
+    environment:
+      RABBITMQ_DEFAULT_USER: thiru
+      RABBITMQ_DEFAULT_PASS: password
+    command: >
+      bash -c "rabbitmq-plugins enable rabbitmq_mqtt &&
+               rabbitmq-server"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+
+volumes:
+  artemis-data:
+  rabbitmq-data:
