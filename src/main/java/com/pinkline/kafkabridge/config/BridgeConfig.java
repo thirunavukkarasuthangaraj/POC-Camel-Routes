@@ -61,6 +61,9 @@ public class BridgeConfig {
     // ── Pipeline: ordered sink list ───────────────────────────────
     private String pipeline = "kafka,rabbitmq,mqtt";
 
+    // ── Encryption ────────────────────────────────────────────────
+    private Encrypt encrypt = new Encrypt();
+
     // ── Outbound: Artemis topics + Kafka ──────────────────────────
     private String artemisTopics;
     private Kafka kafka = new Kafka();
@@ -83,6 +86,9 @@ public class BridgeConfig {
     public String getPipeline() { return pipeline; }
     public void setPipeline(String pipeline) { this.pipeline = pipeline; }
 
+    public Encrypt getEncrypt() { return encrypt; }
+    public void setEncrypt(Encrypt encrypt) { this.encrypt = encrypt; }
+
     public String getArtemisTopics() { return artemisTopics; }
     public void setArtemisTopics(String artemisTopics) { this.artemisTopics = artemisTopics; }
 
@@ -103,6 +109,14 @@ public class BridgeConfig {
 
     public Monitor getMonitor() { return monitor; }
     public void setMonitor(Monitor monitor) { this.monitor = monitor; }
+
+    // ── Inner: Encryption config ──────────────────────────────────
+    public static class Encrypt {
+        private boolean enabled = true;   // always on by default
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+    }
 
     // ── Inner: RabbitMQ outbound sink ────────────────────────────
     public static class RabbitmqOut {

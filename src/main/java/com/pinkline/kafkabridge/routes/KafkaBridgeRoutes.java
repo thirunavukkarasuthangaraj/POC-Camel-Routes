@@ -5,6 +5,7 @@ import com.pinkline.kafkabridge.config.BridgeConfig;
 import com.pinkline.kafkabridge.processor.DecryptExample;
 import com.pinkline.kafkabridge.processor.EncryptProcessor;
 import com.pinkline.kafkabridge.processor.XmlToJsonProcessor;
+import java.nio.charset.StandardCharsets;
 import org.apache.camel.LoggingLevel;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.model.RouteDefinition;
@@ -91,9 +92,18 @@ public class KafkaBridgeRoutes extends RouteBuilder {
 
             RouteDefinition route = from("activemq:topic:" + topic)
                 .routeId(routeId)
-                .log("← Artemis [" + topic + "] — building pipeline: " + config.getPipeline())
-                .process(new XmlToJsonProcessor())
-                .process(new EncryptProcessor());
+                .log("← Artemis [" + topic + "] — pipeline: " + config.getPipeline()
+                        + " | encrypt: " + config.getEncrypt().isEnabled())
+                .process(new XmlToJsonProcessor());
+
+            if (config.getEncrypt().isEnabled()) {
+                route.process(new EncryptProcessor());
+            } else {
+                // No encryption — convert String → UTF-8 bytes so all sinks receive byte[]
+                route.process(e -> e.getIn().setBody(
+                        e.getIn().getBody(String.class).getBytes(StandardCharsets.UTF_8)));
+                route.log("Encryption disabled — plain JSON forwarded");
+            }
 
             // Build the pipeline dynamically from config
             for (String step : config.getPipeline().split(",")) {
