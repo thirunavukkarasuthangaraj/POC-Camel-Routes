@@ -347,10 +347,13 @@ Key source: ENV variable SCADA_AES_KEY (Base64 encoded)
 
 | Layer | What | Where |
 |---|---|---|
+| **TLS — Artemis** | `ssl://` connection, JKS truststore | `SecurityConfig.java` + `application-{env}.properties` |
+| **TLS — Kafka** | `SASL_SSL`, JKS truststore | `application-{env}.properties` |
+| **TLS — RabbitMQ** | AMQPS port 5671, JKS truststore | `application-{env}.properties` |
 | **XXE Prevention** | All external XML entity features disabled | `XmlToJsonProcessor` |
 | **AES-256-GCM** | Authenticated encryption, fresh IV per message | `EncryptProcessor` |
 | **Key from ENV only** | `SCADA_AES_KEY` — never in config/code | `EncryptProcessor` |
-| **Credential from ENV** | Artemis/Kafka/RabbitMQ passwords from ENV | `application.properties` |
+| **All broker values from ENV** | Host, port, user, password — all env vars | `application-{env}.properties` |
 | **Dead Letter Queue** | Failed messages → `DLQ.kafka-bridge` | `KafkaBridgeRoutes` |
 | **Retry with backoff** | 3 retries, 2s delay before dead-letter | `KafkaBridgeRoutes` |
 | **No sensitive logging** | Topic name only — body never logged | All processors |
@@ -377,6 +380,80 @@ sends username+password  ──►  RabbitMQ checks internal user store
 
 ---
 
+## Environment Profiles
+
+Spring Boot automatically picks the right config based on `SPRING_PROFILES_ACTIVE`.
+
+```
+SPRING_PROFILES_ACTIVE=prod
+        │
+        ▼
+application.properties              ← always loaded (topics, camel — common to all)
+        +
+application-prod.properties         ← broker hosts/ports/TLS from env vars
+```
+
+| Profile | How to activate | TLS | Broker values |
+|---|---|---|---|
+| `local` | `mvn spring-boot:run -Dspring.profiles.active=local` | Off | Hardcoded localhost |
+| `dev` | `export SPRING_PROFILES_ACTIVE=dev` | On | From env vars |
+| `staging` | `export SPRING_PROFILES_ACTIVE=staging` | On | From env vars |
+| `prod` | `export SPRING_PROFILES_ACTIVE=prod` | On | From env vars |
+
+---
+
+## Required Environment Variables (dev / staging / prod)
+
+```bash
+# Artemis
+export ARTEMIS_HOST=10.12.1.13
+export ARTEMIS_PORT=61617
+export ARTEMIS_USER=pasbridge
+export ARTEMIS_PASS=<password>
+
+# Kafka
+export KAFKA_HOST=10.12.1.14
+export KAFKA_PORT=9093
+export KAFKA_USER=tms_bridge
+export KAFKA_PASS=<password>
+
+# RabbitMQ
+export RABBITMQ_HOST=10.12.1.11
+export RABBITMQ_PORT=5671
+export RABBITMQ_USER=tms_bridge
+export RABBITMQ_PASS=<password>
+
+# TLS — single truststore covers all 3 brokers
+export TLS_TRUSTSTORE_PATH=/opt/pinkline/certs/truststore.jks
+export TLS_TRUSTSTORE_PASS=<password>
+
+# Encryption
+export SCADA_AES_KEY=<base64-256bit-key>
+
+# Profile
+export SPRING_PROFILES_ACTIVE=prod
+```
+
+If any variable is missing, the app **fails immediately** at startup with a clear error — nothing runs silently with wrong config.
+
+---
+
+## How TLS Works
+
+```
+App ──(TLS ssl://)──► Artemis    port 61617
+App ──(SASL_SSL)──►  Kafka       port 9093
+App ──(AMQPS)────►   RabbitMQ    port 5671
+```
+
+A single JKS truststore file contains CA certificates for all 3 brokers.
+`SecurityConfig.java` wires the truststore into the Artemis SSL factory.
+Kafka and RabbitMQ read TLS config directly from `application-{env}.properties`.
+
+Local profile uses plain TCP/AMQP — no truststore needed for Docker testing.
+
+---
+
 ## Project Files
 
 ```
@@ -390,7 +467,7 @@ PAS-SCADA-Kafka-Bridge/
     │   ├── java/com/pinkline/kafkabridge/
     │   │   ├── KafkaBridgeApplication.java         Spring Boot entry point
     │   │   ├── config/
-    │   │   │   └── SecurityConfig.java             Auth config for all brokers
+    │   │   │   └── SecurityConfig.java             TLS + auth config for all brokers
     │   │   ├── model/
     │   │   │   ├── ATRTimeTable.java               XML POJO — timetable
     │   │   │   ├── SingleArrival.java              XML POJO — train arrived
@@ -400,10 +477,13 @@ PAS-SCADA-Kafka-Bridge/
     │   │   │   ├── XmlToJsonProcessor.java         Jackson XML→ICD JSON
     │   │   │   └── EncryptProcessor.java           AES-256-GCM encryption
     │   │   └── routes/
-    │   │       └── KafkaBridgeRoutes.java          Camel routes (producer+consumer)
+    │   │       └── KafkaBridgeRoutes.java          Camel routes — all topics from config
     │   └── resources/
-    │       ├── application.properties              Production config
-    │       └── application-local.properties        Local test config
+    │       ├── application.properties              Common config (topics, camel)
+    │       ├── application-local.properties        Local Docker — no TLS, hardcoded
+    │       ├── application-dev.properties          Dev server — TLS on, env vars
+    │       ├── application-staging.properties      Staging server — TLS on, env vars
+    │       └── application-prod.properties         Production — TLS on, env vars
     │
     └── test/
         └── java/com/pinkline/kafkabridge/

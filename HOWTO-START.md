@@ -181,25 +181,96 @@ What it does:
 
 ## PRODUCTION Start (Real Servers)
 
-Before running `start-production.bat`, set these environment variables:
+### Step 1 — Set environment variables
 
-Open CMD as Administrator and set:
-```cmd
-set SCADA_AES_KEY=<base64 AES key — get from security team>
-set ARTEMIS_PASS=<Artemis password for user pasbridge>
-set RABBITMQ_PASS=<RabbitMQ password for user tms_bridge>
+All broker details and secrets must be set as environment variables before starting.
+Nothing is hardcoded — the app reads everything from the environment.
+
+**Linux/Mac (production server):**
+```bash
+# Profile
+export SPRING_PROFILES_ACTIVE=prod
+
+# Artemis
+export ARTEMIS_HOST=10.12.1.13
+export ARTEMIS_PORT=61617
+export ARTEMIS_USER=pasbridge
+export ARTEMIS_PASS=<password>
+
+# Kafka
+export KAFKA_HOST=10.12.1.14
+export KAFKA_PORT=9093
+export KAFKA_USER=tms_bridge
+export KAFKA_PASS=<password>
+
+# RabbitMQ
+export RABBITMQ_HOST=10.12.1.11
+export RABBITMQ_PORT=5671
+export RABBITMQ_USER=tms_bridge
+export RABBITMQ_PASS=<password>
+
+# TLS (single truststore for all 3 brokers)
+export TLS_TRUSTSTORE_PATH=/opt/pinkline/certs/truststore.jks
+export TLS_TRUSTSTORE_PASS=<password>
+
+# Encryption key
+export SCADA_AES_KEY=<base64-256bit-key>
 ```
 
-Generate AES key (one time only):
+**Windows (CMD as Administrator):**
 ```cmd
-REM On Windows (PowerShell):
-[Convert]::ToBase64String((1..32 | % { [byte](Get-Random -Max 256) }))
+set SPRING_PROFILES_ACTIVE=prod
+set ARTEMIS_HOST=10.12.1.13
+set ARTEMIS_PORT=61617
+set ARTEMIS_USER=pasbridge
+set ARTEMIS_PASS=<password>
+set KAFKA_HOST=10.12.1.14
+set KAFKA_PORT=9093
+set KAFKA_USER=tms_bridge
+set KAFKA_PASS=<password>
+set RABBITMQ_HOST=10.12.1.11
+set RABBITMQ_PORT=5671
+set RABBITMQ_USER=tms_bridge
+set RABBITMQ_PASS=<password>
+set TLS_TRUSTSTORE_PATH=C:\pinkline\certs\truststore.jks
+set TLS_TRUSTSTORE_PASS=<password>
+set SCADA_AES_KEY=<base64-256bit-key>
+```
 
-REM On Linux/Mac:
+### Step 2 — Generate AES key (one time only)
+
+```bash
+# Linux/Mac:
 openssl rand -base64 32
+
+# Windows PowerShell:
+[Convert]::ToBase64String((1..32 | % { [byte](Get-Random -Max 256) }))
 ```
 
-Then double-click: **`start-production.bat`**
+Share the same key securely with the SCADA team — they need it to decrypt.
+
+### Step 3 — Start the app
+
+```bash
+java -jar PAS-SCADA-Kafka-Bridge.jar
+```
+
+Or double-click: **`start-production.bat`**
+
+---
+
+## Environment Profiles
+
+The app automatically switches config based on `SPRING_PROFILES_ACTIVE`.
+
+| Profile | Use for | TLS | Broker addresses |
+|---|---|---|---|
+| `local` | Local Docker testing | Off | `localhost` hardcoded |
+| `dev` | Dev server | On | From env vars |
+| `staging` | Staging server | On | From env vars |
+| `prod` | Production | On | From env vars |
+
+Same code, same JAR — only the environment variables change per server.
 
 ---
 
@@ -333,10 +404,13 @@ String json = new String(cipher.doFinal(ciphertext), StandardCharsets.UTF_8);
 ### Security Checklist (Admin must do before production)
 
 #### Bridge Server
+- [ ] Set ENV: `SPRING_PROFILES_ACTIVE=prod`
+- [ ] Set ENV: `ARTEMIS_HOST`, `ARTEMIS_PORT`, `ARTEMIS_USER`, `ARTEMIS_PASS`
+- [ ] Set ENV: `KAFKA_HOST`, `KAFKA_PORT`, `KAFKA_USER`, `KAFKA_PASS`
+- [ ] Set ENV: `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASS`
+- [ ] Set ENV: `TLS_TRUSTSTORE_PATH`, `TLS_TRUSTSTORE_PASS`
 - [ ] Set ENV: `SCADA_AES_KEY=<base64-32-bytes>`
-- [ ] Set ENV: `ARTEMIS_PASS=<artemis-pasbridge-password>`
-- [ ] Set ENV: `RABBITMQ_PASS=<rabbitmq-tms_bridge-password>`
-- [ ] Set ENV: `KAFKA_PASS=<kafka-tms_bridge-password>`
+- [ ] Place JKS truststore at `TLS_TRUSTSTORE_PATH` (contains CA certs for all 3 brokers)
 
 #### Artemis Server (10.12.1.13)
 - [ ] Create user: `pasbridge` with password
@@ -446,8 +520,11 @@ PAS-SCADA-Kafka-Bridge/
     │   │       └── config/
     │   │           └── SecurityConfig.java       ← auth config
     │   └── resources/
-    │       ├── application.properties            ← PRODUCTION server IPs
-    │       └── application-local.properties      ← LOCAL docker IPs
+    │       ├── application.properties            ← common (topics, camel)
+    │       ├── application-local.properties      ← local Docker, no TLS
+    │       ├── application-dev.properties        ← dev server, TLS on, env vars
+    │       ├── application-staging.properties    ← staging server, TLS on, env vars
+    │       └── application-prod.properties       ← production, TLS on, env vars
     │
     └── test/
         └── java/com/pinkline/kafkabridge/
