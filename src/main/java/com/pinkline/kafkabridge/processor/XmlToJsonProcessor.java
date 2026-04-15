@@ -8,6 +8,7 @@ import com.pinkline.kafkabridge.model.ATRTimeTable;
 import com.pinkline.kafkabridge.model.RouteInfo;
 import com.pinkline.kafkabridge.model.SingleArrival;
 import com.pinkline.kafkabridge.model.SingleDeparture;
+import com.pinkline.kafkabridge.model.RcsMsg;
 import com.pinkline.kafkabridge.model.XmlMessage;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
@@ -92,6 +93,11 @@ public class XmlToJsonProcessor implements Processor {
             // Real TMS XmlMessage — PlatformPredictions / BlockOccupancies / VCIF
             XmlMessage xmlMsg = xmlMapper.readValue(xml, XmlMessage.class);
             json = buildFromXmlMessage(xmlMsg);
+
+        } else if (xml.contains("<rcsMsg")) {
+            // Real TMS PAS info — topic TMS.PISInfo (rcs.e2k.ctc.train.pas.V1)
+            RcsMsg rcsMsg = xmlMapper.readValue(xml, RcsMsg.class);
+            json = buildFromRcsMsg(rcsMsg);
 
         } else {
             log.warn("Unknown XML message type — building minimal JSON envelope");
@@ -341,6 +347,68 @@ public class XmlToJsonProcessor implements Processor {
             out.setTimeZone(TimeZone.getTimeZone("UTC"));
             return out.format(in.parse(oTime));
         } catch (Exception e) { return ""; }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // rcsMsg → ICD JSON
+    // Real TMS PAS info format: topic TMS.PISInfo, schema rcs.e2k.ctc.train.pas.V1
+    // One PlatformInfo per platform, one Train per predicted arrival.
+    // ══════════════════════════════════════════════════════════════════════
+    private String buildFromRcsMsg(RcsMsg msg) throws Exception {
+        long nowMs = System.currentTimeMillis();
+        ObjectNode root = buildEnvelope(nowMs);
+
+        ArrayNode platformPredictions = jsonMapper.createArrayNode();
+
+        if (msg.data != null
+                && msg.data.platformInfos != null
+                && msg.data.platformInfos.platformInfo != null) {
+
+            for (RcsMsg.PlatformInfo pi : msg.data.platformInfos.platformInfo) {
+                if (pi.platform == null) continue;
+
+                ArrayNode predictedTrains = jsonMapper.createArrayNode();
+
+                if (pi.trains != null && pi.trains.train != null) {
+                    for (RcsMsg.Train train : pi.trains.train) {
+
+                        long arrSecs  = calcSecsFromNow(train.arrivalTime, nowMs);
+                        String depTime = formatTime(train.departureTime);
+
+                        // status: 1=at station, 0=predicted/approaching
+                        int status = "yes".equalsIgnoreCase(train.atStation) ? 1 : 0;
+
+                        // serviceState: 1=will stop, 0=pass through
+                        int serviceState = "yes".equalsIgnoreCase(train.willStop) ? 1 : 0;
+
+                        // trainId: prefer GUID, fall back to name
+                        String trainId = (train.guid != null && !train.guid.isBlank())
+                                ? train.guid : train.name;
+
+                        ObjectNode t = jsonMapper.createObjectNode();
+                        t.put("slot",          train.idx + 1);
+                        t.put("trainId",       trainId != null ? trainId : "");
+                        t.put("arrivalTime",   arrSecs);
+                        t.put("departureTime", depTime);
+                        t.put("status",        status);
+                        t.put("destination",   train.destinationId != null ? train.destinationId : "");
+                        t.put("serviceState",  serviceState);
+                        t.put("runNumber",     train.tripNo);
+                        predictedTrains.add(t);
+                    }
+                }
+
+                ObjectNode platform = jsonMapper.createObjectNode();
+                platform.put("platformId", pi.platform);
+                platform.set("predictedTrains", predictedTrains);
+                platformPredictions.add(platform);
+            }
+        }
+
+        root.set("platformPredictions", platformPredictions);
+        root.set("blockOccupancies",    jsonMapper.createArrayNode());
+        root.set("gateCommands",        jsonMapper.createArrayNode());
+        return root.toString();
     }
 
     // ══════════════════════════════════════════════════════════════════════
