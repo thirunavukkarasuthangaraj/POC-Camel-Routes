@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bridge-config
+  namespace: pinkline
+data:
+  # ── Matches application-prod.properties variable names exactly ────
+  SPRING_PROFILES_ACTIVE: "prod"
+
+  # camel.component.activemq.broker-url=ssl://${ARTEMIS_HOST}:${ARTEMIS_PORT}
+  ARTEMIS_HOST: "artemis-service"
+  ARTEMIS_PORT: "61616"
+
+  # kafka.brokers=${KAFKA_HOST}:${KAFKA_PORT}
+  KAFKA_HOST: "kafka-service"
+  KAFKA_PORT: "9092"
+
+  # spring.rabbitmq.host=${RABBITMQ_HOST}
+  # spring.rabbitmq.port=${RABBITMQ_PORT}
+  RABBITMQ_HOST: "rabbitmq-service"
+  RABBITMQ_PORT: "5672"
+
+  # bridge.mqtt.broker-url=tcp://${MQTT_HOST}:${MQTT_PORT}
+  MQTT_HOST: "rabbitmq-service"
+  MQTT_PORT: "1883"
+
+  # tls.truststore.path=${TLS_TRUSTSTORE_PATH}
+  TLS_TRUSTSTORE_PATH: "/etc/ssl/bridge/truststore.jks"
