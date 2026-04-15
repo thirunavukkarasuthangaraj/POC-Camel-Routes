@@ -22,11 +22,15 @@ spec:
             - containerPort: 8085
 
           # ── Non-sensitive config from ConfigMap ──────────
+          # Provides: SPRING_PROFILES_ACTIVE, ARTEMIS_HOST/PORT,
+          #           KAFKA_HOST/PORT, RABBITMQ_HOST/PORT, MQTT_HOST/PORT
           envFrom:
             - configMapRef:
                 name: bridge-config
 
           # ── Sensitive config from Secret ─────────────────
+          # Provides: ARTEMIS_USER/PASS, RABBITMQ_USER/PASS,
+          #           MQTT_USER/PASS, SCADA_AES_KEY
           env:
             - name: SCADA_AES_KEY
               valueFrom:
@@ -43,16 +47,6 @@ spec:
                 secretKeyRef:
                   name: bridge-secret
                   key: ARTEMIS_PASS
-            - name: KAFKA_USER
-              valueFrom:
-                secretKeyRef:
-                  name: bridge-secret
-                  key: KAFKA_USER
-            - name: KAFKA_PASS
-              valueFrom:
-                secretKeyRef:
-                  name: bridge-secret
-                  key: KAFKA_PASS
             - name: RABBITMQ_USER
               valueFrom:
                 secretKeyRef:
@@ -73,17 +67,12 @@ spec:
                 secretKeyRef:
                   name: bridge-secret
                   key: MQTT_PASS
-            - name: TLS_TRUSTSTORE_PASS
-              valueFrom:
-                secretKeyRef:
-                  name: bridge-secret
-                  key: TLS_TRUSTSTORE_PASS
 
-          # ── TLS truststore volume ─────────────────────────
-          volumeMounts:
-            - name: truststore
-              mountPath: /etc/ssl/bridge
-              readOnly: true
+          # TLS volume — DevOps will uncomment when ready:
+          # volumeMounts:
+          #   - name: truststore
+          #     mountPath: /etc/ssl/bridge
+          #     readOnly: true
 
           # ── Health checks ─────────────────────────────────
           livenessProbe:
@@ -109,10 +98,11 @@ spec:
               memory: "512Mi"
               cpu: "500m"
 
-      volumes:
-        - name: truststore
-          secret:
-            secretName: bridge-tls-truststore
+      # TLS volume — DevOps will uncomment when ready:
+      # volumes:
+      #   - name: truststore
+      #     secret:
+      #       secretName: bridge-tls-truststore
 
 ---
 apiVersion: v1
