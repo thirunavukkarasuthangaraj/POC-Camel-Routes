@@ -1,38 +1,57 @@
 package com.pinkline.kafkabridge.routes;
 
+import com.pinkline.kafkabridge.api.MessageStore;
 import com.pinkline.kafkabridge.config.BridgeConfig;
+import com.pinkline.kafkabridge.processor.DecryptExample;
 import com.pinkline.kafkabridge.processor.EncryptProcessor;
 import com.pinkline.kafkabridge.processor.XmlToJsonProcessor;
 import org.apache.camel.LoggingLevel;
 import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.model.RouteDefinition;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
- * KafkaBridgeRoutes — Generic Camel Router
+ * KafkaBridgeRoutes — Fully Config-Driven Camel Router
  *
- * All routes are built dynamically from application.properties.
- * Adding a new route = adding config only. Zero code changes.
+ * ══════════════════════════════════════════════════════════════════════
+ * PIPELINE (application.properties → bridge.pipeline)
+ * ══════════════════════════════════════════════════════════════════════
  *
- * ── Route Type 1: Artemis → Kafka (Outbound) ─────────────────────
- *   Reads bridge.artemis.topics (comma-separated)
- *   One Camel route created per topic automatically.
- *   Flow: from(artemis:topic) → XmlToJson → Encrypt → to(kafka)
+ * Controls the delivery chain from Artemis. Change config, restart — done.
+ * No code changes needed.
  *
- * ── Route Type 2: Kafka → RabbitMQ (Forward) ─────────────────────
- *   Reads bridge.forward[n] entries
- *   One Camel route created per entry automatically.
- *   Flow: from(kafka:topic) → to(spring-rabbitmq:exchange)
+ *   bridge.pipeline=kafka,rabbitmq,mqtt    full chain (default)
+ *   bridge.pipeline=mqtt                   direct Artemis → MQTT
+ *   bridge.pipeline=kafka,mqtt             Kafka audit + direct MQTT
+ *   bridge.pipeline=kafka,rabbitmq         no MQTT (store in brokers only)
+ *   bridge.pipeline=kafka                  Kafka only
  *
- * ── Route Type 3: RabbitMQ → Artemis (Inbound) ───────────────────
- *   Reads bridge.inbound[n] entries
- *   One Camel route created per entry automatically.
- *   Flow: from(spring-rabbitmq:exchange) → to(artemis:topic)
+ * Pipeline steps are executed IN ORDER as listed. The message flows
+ * through each step sequentially in a single Camel route per Artemis topic.
  *
- * Example — adding Power SCADA inbound (no code change needed):
- *   bridge.inbound[0].from-exchange=amq.topic
- *   bridge.inbound[0].routing-key=power.scada.tms
- *   bridge.inbound[0].to-topic=TMS.PowerScada.Info
+ * ══════════════════════════════════════════════════════════════════════
+ * RELAY ROUTES (optional — bridge.forward[n])
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * Optional separate consumer routes (Kafka → RabbitMQ).
+ * Only needed if Kafka must be a true relay point (not just a write-through).
+ * Leave empty if pipeline write-through is sufficient.
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * INBOUND ROUTES (optional — bridge.inbound[n])
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * RabbitMQ → Artemis reverse routes.
+ * Used for commands/responses coming back from SCADA to TMS.
+ *
+ * ══════════════════════════════════════════════════════════════════════
+ * MONITOR (optional — bridge.monitor.enabled=true)
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * Feeds the in-bridge REST API (/api/messages).
+ * Only useful if you want a local message viewer inside the bridge app.
+ * For production, use the separate SCADA-API microservice instead.
  */
 @Component
 public class KafkaBridgeRoutes extends RouteBuilder {
@@ -42,6 +61,9 @@ public class KafkaBridgeRoutes extends RouteBuilder {
 
     @Autowired
     private BridgeConfig config;
+
+    @Autowired
+    private MessageStore messageStore;
 
     @Override
     public void configure() {
@@ -56,50 +78,95 @@ public class KafkaBridgeRoutes extends RouteBuilder {
             .log("Dead-letter queue — ${exception.message}")
             .handled(true);
 
-        // ── Route Type 1: Artemis → Kafka (one route per topic) ──────────
+        // ══════════════════════════════════════════════════════════════════
+        // OUTBOUND: Artemis → pipeline sinks (one route per Artemis topic)
+        //
+        // The pipeline is built dynamically from bridge.pipeline config.
+        // Each step in the pipeline adds a .to() call to the route.
+        // Order in config = order of delivery.
+        // ══════════════════════════════════════════════════════════════════
         for (String topic : config.getArtemisTopics().split(",")) {
             topic = topic.trim();
-            String clientId = "pas-bridge-" + topic.replace(".", "-").toLowerCase();
-            String subName  = "pas-bridge-" + topic.replace(".", "-").toLowerCase();
-            String routeId  = "outbound-" + topic.replace(".", "-").toLowerCase();
+            String routeId = "outbound-" + topic.replace(".", "-").toLowerCase();
 
-            from("activemq:topic:" + topic
-                    + "?clientId=" + clientId
-                    + "&subscriptionDurable=true"
-                    + "&durableSubscriptionName=" + subName)
+            RouteDefinition route = from("activemq:topic:" + topic)
                 .routeId(routeId)
-                .log("Received from Artemis topic: " + topic)
+                .log("← Artemis [" + topic + "] — building pipeline: " + config.getPipeline())
                 .process(new XmlToJsonProcessor())
-                .process(new EncryptProcessor())
-                .to("kafka:" + config.getKafka().getTopic()
-                        + "?brokers={{kafka.brokers}}"
-                        + "&serializerClass=" + BYTE_SER
-                        + "&keySerializerClass=" + BYTE_SER)
-                .log("Published to Kafka: " + config.getKafka().getTopic());
+                .process(new EncryptProcessor());
+
+            // Build the pipeline dynamically from config
+            for (String step : config.getPipeline().split(",")) {
+                switch (step.trim().toLowerCase()) {
+
+                    case "kafka" -> {
+                        route.to("kafka:" + config.getKafka().getTopic()
+                                + "?brokers={{kafka.brokers}}"
+                                + "&valueSerializer=" + BYTE_SER
+                                + "&keySerializer=" + BYTE_SER);
+                        route.log("→ Kafka [" + config.getKafka().getTopic() + "]");
+                    }
+
+                    case "rabbitmq" -> {
+                        BridgeConfig.RabbitmqOut rmq = config.getRabbitmqOut();
+                        route.to("spring-rabbitmq:" + rmq.getExchange()
+                                + "?routingKey=" + rmq.getRoutingKey());
+                        route.log("→ RabbitMQ [" + rmq.getExchange()
+                                + " / " + rmq.getRoutingKey() + "]");
+                    }
+
+                    case "mqtt" -> {
+                        BridgeConfig.MqttSink mqtt = config.getMqtt();
+                        StringBuilder uri = new StringBuilder("paho:")
+                                .append(mqtt.getTopic())
+                                .append("?brokerUrl=").append(mqtt.getBrokerUrl())
+                                .append("&qos=").append(mqtt.getQos())
+                                .append("&clientId=").append(mqtt.getClientId())
+                                .append("-").append(topic.replace(".", "-").toLowerCase());
+                        if (mqtt.getUsername() != null && !mqtt.getUsername().isBlank()) {
+                            uri.append("&userName=").append(mqtt.getUsername())
+                               .append("&password=").append(mqtt.getPassword());
+                        }
+                        route.to(uri.toString());
+                        route.log("→ MQTT [" + mqtt.getTopic() + "]");
+                    }
+
+                    default -> log.warn("Unknown pipeline step '{}' — skipped", step.trim());
+                }
+            }
         }
 
-        // ── Route Type 2: Kafka → RabbitMQ (one route per forward entry) ─
+        // ══════════════════════════════════════════════════════════════════
+        // RELAY ROUTES: Kafka → RabbitMQ (optional, one per forward entry)
+        //
+        // Only needed when Kafka must act as a true relay point.
+        // With pipeline write-through, these are not required.
+        // Configure bridge.forward[n] to enable.
+        // ══════════════════════════════════════════════════════════════════
         for (BridgeConfig.ForwardRoute fwd : config.getForward()) {
-            String routeId = "forward-" + fwd.getFromKafka().replace(".", "-")
+            String routeId = "relay-" + fwd.getFromKafka().replace(".", "-")
                            + "-to-" + fwd.getRoutingKey().replace(".", "-");
 
             from("kafka:" + fwd.getFromKafka()
                     + "?brokers={{kafka.brokers}}"
                     + "&groupId=" + fwd.getConsumerGroup()
                     + "&autoOffsetReset=latest"
-                    + "&deserializerClass=" + BYTE_DESER
-                    + "&keyDeserializerClass=" + BYTE_DESER)
+                    + "&valueDeserializer=" + BYTE_DESER
+                    + "&keyDeserializer=" + BYTE_DESER)
                 .routeId(routeId)
-                .log("Kafka → RabbitMQ | topic: " + fwd.getFromKafka()
-                        + " → exchange: " + fwd.getToExchange()
-                        + " | key: " + fwd.getRoutingKey())
+                .log("← Kafka relay [" + fwd.getFromKafka() + "]")
                 .to("spring-rabbitmq:" + fwd.getToExchange()
-                        + "?routingKey=" + fwd.getRoutingKey()
-                        + "&autoStartup=true")
-                .log("Forwarded to RabbitMQ — " + fwd.getRoutingKey());
+                        + "?routingKey=" + fwd.getRoutingKey())
+                .log("→ RabbitMQ relay [" + fwd.getToExchange()
+                        + " / " + fwd.getRoutingKey() + "]");
         }
 
-        // ── Route Type 3: RabbitMQ → Artemis (one route per inbound entry) ─
+        // ══════════════════════════════════════════════════════════════════
+        // INBOUND ROUTES: RabbitMQ → Artemis (optional, one per inbound entry)
+        //
+        // For commands/responses from SCADA back to TMS.
+        // Configure bridge.inbound[n] to enable.
+        // ══════════════════════════════════════════════════════════════════
         for (BridgeConfig.InboundRoute inb : config.getInbound()) {
             String routeId = "inbound-" + inb.getRoutingKey().replace(".", "-")
                            + "-to-" + inb.getToTopic().replace(".", "-");
@@ -108,10 +175,40 @@ public class KafkaBridgeRoutes extends RouteBuilder {
                     + "?routingKey=" + inb.getRoutingKey()
                     + "&autoStartup=true")
                 .routeId(routeId)
-                .log("RabbitMQ → Artemis | key: " + inb.getRoutingKey()
-                        + " → topic: " + inb.getToTopic())
+                .log("← RabbitMQ inbound [" + inb.getRoutingKey() + "]")
                 .to("activemq:topic:" + inb.getToTopic())
-                .log("Forwarded to Artemis topic: " + inb.getToTopic());
+                .log("→ Artemis [" + inb.getToTopic() + "]");
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // MONITOR: RabbitMQ → in-bridge API (optional)
+        //
+        // Feeds the local /api/messages REST endpoint inside this app.
+        // Enable with bridge.monitor.enabled=true
+        // For production use, prefer the separate SCADA-API microservice.
+        // ══════════════════════════════════════════════════════════════════
+        if (config.getMonitor().isEnabled()) {
+            BridgeConfig.Monitor mon = config.getMonitor();
+            from("spring-rabbitmq:" + mon.getFromExchange()
+                    + "?queues=" + mon.getQueue()
+                    + "&routingKey=" + mon.getRoutingKey()
+                    + "&autoStartup=true")
+                .routeId("monitor-rabbitmq-to-api")
+                .log("← Monitor [" + mon.getRoutingKey() + "]")
+                .process(exchange -> {
+                    byte[] payload = exchange.getIn().getBody(byte[].class);
+                    if (payload == null) {
+                        payload = exchange.getIn().getBody(String.class).getBytes();
+                    }
+                    String json = DecryptExample.decrypt(payload);
+                    exchange.getIn().setBody(json);
+                })
+                .process(exchange -> {
+                    String json  = exchange.getIn().getBody(String.class);
+                    String topic = exchange.getIn().getHeader("kafka.TOPIC", mon.getRoutingKey(), String.class);
+                    messageStore.add(topic, json);
+                })
+                .log("→ Monitor stored — available at /api/messages");
         }
     }
 }

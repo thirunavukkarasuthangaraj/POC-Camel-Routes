@@ -84,6 +84,26 @@
       <artifactId>jackson-dataformat-xml</artifactId>
     </dependency>
 
+    <!-- Spring Boot Actuator — exposes /actuator/camelroutes, /health, etc. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+
+    <!-- Camel management — enables /actuator/camelroutes REST endpoint -->
+    <dependency>
+      <groupId>org.apache.camel.springboot</groupId>
+      <artifactId>camel-management-starter</artifactId>
+      <version>${camel.version}</version>
+    </dependency>
+
+    <!-- MQTT direct publish via Paho (used when 'mqtt' is in bridge.pipeline) -->
+    <dependency>
+      <groupId>org.apache.camel.springboot</groupId>
+      <artifactId>camel-paho-starter</artifactId>
+      <version>${camel.version}</version>
+    </dependency>
+
     <!-- Spring Boot Test -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -99,6 +119,12 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration>
+          <!-- Local dev test key — 32 zero bytes base64. NOT for production. -->
+          <environmentVariables>
+            <SCADA_AES_KEY>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</SCADA_AES_KEY>
+          </environmentVariables>
+        </configuration>
       </plugin>
       <!-- Set SCADA_AES_KEY for EncryptProcessorTest (32 zero bytes base64 = test key) -->
       <plugin>

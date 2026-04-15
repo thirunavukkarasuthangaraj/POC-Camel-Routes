@@ -29,10 +29,14 @@ public class SecurityConfig {
     @Value("${camel.component.activemq.broker-url}")
     private String artemisUrl;
 
-    @Value("${camel.component.activemq.username}")
+    // Use artemis.username/password — NOT camel.component.activemq.username/password.
+    // Camel's auto-config reads that namespace and tries to apply credentials via
+    // SingleConnectionFactory.createConnection(user, pass) which throws UnsupportedOperationException.
+    // We set credentials directly on ActiveMQSslConnectionFactory instead.
+    @Value("${artemis.username}")
     private String artemisUser;
 
-    @Value("${camel.component.activemq.password}")
+    @Value("${artemis.password}")
     private String artemisPass;
 
     @Value("${tls.truststore.path:}")
@@ -41,7 +45,9 @@ public class SecurityConfig {
     @Value("${tls.truststore.password:}")
     private String truststorePassword;
 
-    @Bean
+    // Bean name MUST be "activemq" — Camel resolves components by scheme name.
+    // A bean named "activeMQComponent" (camelCase) is NOT found by the activemq:// resolver.
+    @Bean(name = "activemq")
     public ActiveMQComponent activeMQComponent() throws Exception {
         ActiveMQSslConnectionFactory factory = new ActiveMQSslConnectionFactory(artemisUrl);
         factory.setUserName(artemisUser);
@@ -60,6 +66,11 @@ public class SecurityConfig {
 
         ActiveMQComponent component = new ActiveMQComponent();
         component.setConnectionFactory(factory);
+        // JmsConfiguration also needs credentials — DefaultJmsMessageListenerContainer
+        // calls createConnection(username, password) during refresh cycles, using
+        // these values (NOT the factory's stored username/password).
+        component.setUsername(artemisUser);
+        component.setPassword(artemisPass);
         return component;
     }
 }

@@ -8,6 +8,7 @@ import com.pinkline.kafkabridge.model.ATRTimeTable;
 import com.pinkline.kafkabridge.model.RouteInfo;
 import com.pinkline.kafkabridge.model.SingleArrival;
 import com.pinkline.kafkabridge.model.SingleDeparture;
+import com.pinkline.kafkabridge.model.XmlMessage;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.slf4j.Logger;
@@ -86,6 +87,11 @@ public class XmlToJsonProcessor implements Processor {
             // Route info — topic RCS.E2K.TMS.RouteInfo
             RouteInfo routeInfo = xmlMapper.readValue(xml, RouteInfo.class);
             json = buildFromRouteInfo(routeInfo);
+
+        } else if (xml.contains("<XmlMessage")) {
+            // Real TMS XmlMessage — PlatformPredictions / BlockOccupancies / VCIF
+            XmlMessage xmlMsg = xmlMapper.readValue(xml, XmlMessage.class);
+            json = buildFromXmlMessage(xmlMsg);
 
         } else {
             log.warn("Unknown XML message type — building minimal JSON envelope");
@@ -335,6 +341,99 @@ public class XmlToJsonProcessor implements Processor {
             out.setTimeZone(TimeZone.getTimeZone("UTC"));
             return out.format(in.parse(oTime));
         } catch (Exception e) { return ""; }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // XmlMessage → ICD JSON
+    // Real TMS format: PlatformPredictions / BlockOccupancies / VCIF
+    // ══════════════════════════════════════════════════════════════════════
+    private String buildFromXmlMessage(XmlMessage msg) throws Exception {
+        long nowMs = System.currentTimeMillis();
+        ObjectNode root = buildEnvelope(nowMs);
+
+        // ── platformPredictions ─────────────────────────────────────────────
+        ArrayNode platformPredictions = jsonMapper.createArrayNode();
+        if (msg.platformPredictions != null && msg.platformPredictions.platPred != null) {
+            for (XmlMessage.PlatPred pp : msg.platformPredictions.platPred) {
+                if (pp.ppId == null) continue;
+
+                ArrayNode predictedTrains = jsonMapper.createArrayNode();
+
+                // Slot 1
+                if (pp.pt1Id != null && !pp.pt1Id.isBlank()) {
+                    ObjectNode t = jsonMapper.createObjectNode();
+                    t.put("slot",          1);
+                    t.put("trainId",       pp.pt1Id);
+                    t.put("arrivalTime",   pp.pt1At  != null ? pp.pt1At  : 0);
+                    t.put("departureTime", pp.pt1Dt  != null ? pp.pt1Dt  : "");
+                    t.put("status",        pp.pt1St  != null ? pp.pt1St  : 0);
+                    t.put("destination",   pp.pt1De  != null ? pp.pt1De  : "");
+                    t.put("serviceState",  pp.pt1Ss  != null ? pp.pt1Ss  : 0);
+                    t.put("runNumber",     pp.pt1Rn  != null ? pp.pt1Rn  : 0);
+                    predictedTrains.add(t);
+                }
+
+                // Slot 2
+                if (pp.pt2Id != null && !pp.pt2Id.isBlank()) {
+                    ObjectNode t = jsonMapper.createObjectNode();
+                    t.put("slot",          2);
+                    t.put("trainId",       pp.pt2Id);
+                    t.put("arrivalTime",   pp.pt2At  != null ? pp.pt2At  : 0);
+                    t.put("departureTime", pp.pt2Dt  != null ? pp.pt2Dt  : "");
+                    t.put("status",        pp.pt2St  != null ? pp.pt2St  : 0);
+                    t.put("destination",   pp.pt2De  != null ? pp.pt2De  : "");
+                    t.put("serviceState",  pp.pt2Ss  != null ? pp.pt2Ss  : 0);
+                    t.put("runNumber",     pp.pt2Rn  != null ? pp.pt2Rn  : 0);
+                    predictedTrains.add(t);
+                }
+
+                // Slot 3
+                if (pp.pt3Id != null && !pp.pt3Id.isBlank()) {
+                    ObjectNode t = jsonMapper.createObjectNode();
+                    t.put("slot",          3);
+                    t.put("trainId",       pp.pt3Id);
+                    t.put("arrivalTime",   pp.pt3At  != null ? pp.pt3At  : 0);
+                    t.put("departureTime", pp.pt3Dt  != null ? pp.pt3Dt  : "");
+                    t.put("status",        pp.pt3St  != null ? pp.pt3St  : 0);
+                    t.put("destination",   pp.pt3De  != null ? pp.pt3De  : "");
+                    t.put("serviceState",  pp.pt3Ss  != null ? pp.pt3Ss  : 0);
+                    t.put("runNumber",     pp.pt3Rn  != null ? pp.pt3Rn  : 0);
+                    predictedTrains.add(t);
+                }
+
+                ObjectNode platform = jsonMapper.createObjectNode();
+                platform.put("platformId", "PL" + pp.ppId);
+                platform.set("predictedTrains", predictedTrains);
+                platformPredictions.add(platform);
+            }
+        }
+
+        // ── blockOccupancies ────────────────────────────────────────────────
+        ArrayNode blockOccupancies = jsonMapper.createArrayNode();
+        if (msg.blockOccupancies != null && msg.blockOccupancies.blOccu != null) {
+            for (XmlMessage.BlOccu bo : msg.blockOccupancies.blOccu) {
+                ObjectNode b = jsonMapper.createObjectNode();
+                b.put("blockId", bo.bId != null ? bo.bId : 0);
+                b.put("status",  bo.bSt != null ? bo.bSt : 0);
+                blockOccupancies.add(b);
+            }
+        }
+
+        // ── gateCommands (VCIF) ─────────────────────────────────────────────
+        ArrayNode gateCommands = jsonMapper.createArrayNode();
+        if (msg.vcif != null && msg.vcif.gateCMD != null) {
+            for (XmlMessage.GateCMD gc : msg.vcif.gateCMD) {
+                ObjectNode g = jsonMapper.createObjectNode();
+                g.put("gateId",  gc.gId  != null ? gc.gId  : 0);
+                g.put("command", gc.gCmd != null ? gc.gCmd : 0);
+                gateCommands.add(g);
+            }
+        }
+
+        root.set("platformPredictions", platformPredictions);
+        root.set("blockOccupancies",    blockOccupancies);
+        root.set("gateCommands",        gateCommands);
+        return root.toString();
     }
 
     /** Minimal JSON when message type is unknown */
