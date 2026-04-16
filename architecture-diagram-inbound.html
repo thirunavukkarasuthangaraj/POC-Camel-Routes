@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PAS-SCADA Kafka Bridge — Inbound Architecture (External → EBI Screen)</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', sans-serif; background: #0d1117; color: #e6edf3; padding: 24px; }
+
+h1 { font-size: 20px; color: #58a6ff; text-align: center; margin-bottom: 4px; }
+.subtitle { text-align: center; color: #8b949e; font-size: 13px; margin-bottom: 6px; }
+.direction-badge {
+  text-align: center; margin-bottom: 28px;
+}
+.dir-pill {
+  display: inline-block; background: #1a0d2e; color: #bc8cff;
+  border: 1px solid #8957e5; border-radius: 20px;
+  padding: 4px 16px; font-size: 12px; font-weight: 700;
+}
+
+/* ── ZONE wrappers ── */
+.zone {
+  border: 2px solid #30363d; border-radius: 12px;
+  margin-bottom: 0; position: relative;
+}
+.zone-label {
+  position: absolute; top: -13px; left: 16px;
+  background: #0d1117; padding: 0 8px;
+  font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+}
+
+.zone-ext    { border-color: #8957e5; }
+.zone-ext .zone-label    { color: #bc8cff; }
+.zone-kafka  { border-color: #d29922; }
+.zone-kafka .zone-label  { color: #e3b341; }
+.zone-bridge { border-color: #238636; }
+.zone-bridge .zone-label { color: #3fb950; }
+.zone-artemis{ border-color: #1f6feb; }
+.zone-artemis .zone-label{ color: #58a6ff; }
+.zone-tms    { border-color: #0b6e4f; }
+.zone-tms .zone-label    { color: #39d353; }
+
+/* ── CONNECTOR arrows between zones ── */
+.connector {
+  display: flex; align-items: center; justify-content: center;
+  padding: 6px 0; gap: 8px; font-size: 11px; color: #8b949e;
+}
+.arrow-down {
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+}
+.arr-line { width: 2px; height: 24px; background: #bc8cff; }
+.arr-head { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 10px solid #bc8cff; }
+
+/* ── ROW inside a zone ── */
+.row { display: flex; align-items: stretch; gap: 12px; padding: 16px 20px; }
+
+/* ── BOX ── */
+.box {
+  border: 1px solid #30363d; border-radius: 8px;
+  background: #161b22; padding: 12px 14px;
+}
+.box-title {
+  font-size: 13px; font-weight: 700; margin-bottom: 4px;
+  display: flex; align-items: center; gap: 6px;
+}
+.box-sub  { font-size: 11px; color: #8b949e; margin-bottom: 6px; }
+.box-body { font-size: 11px; color: #e6edf3; line-height: 1.7; }
+
+.box-blue   { border-color: #1f6feb; background: #0c1d3a; }
+.box-green  { border-color: #238636; background: #0d2d0f; }
+.box-yellow { border-color: #d29922; background: #1f1400; }
+.box-purple { border-color: #8957e5; background: #1a0d2e; }
+.box-teal   { border-color: #0b6e4f; background: #0d2218; }
+.box-gray   { border-color: #30363d; background: #161b22; }
+.box-red    { border-color: #da3633; background: #2d0a0a; }
+.box-orange { border-color: #e07b39; background: #1f1000; }
+
+/* ── inline arrow ── */
+.arr-right {
+  display: inline-flex; align-items: center;
+  color: #bc8cff; font-size: 20px; margin: 0 6px;
+}
+
+/* ── pill ── */
+.pill {
+  display: inline-block; border-radius: 4px; padding: 1px 7px;
+  font-size: 10px; font-family: monospace; font-weight: 600;
+  margin: 1px 0;
+}
+.pill-blue   { background: #1c2d3a; color: #58a6ff; border: 1px solid #1f6feb55; }
+.pill-green  { background: #0d2d0f; color: #3fb950; border: 1px solid #23863655; }
+.pill-yellow { background: #1f1400; color: #e3b341; border: 1px solid #d2992255; }
+.pill-purple { background: #1a0d2e; color: #bc8cff; border: 1px solid #8957e555; }
+.pill-teal   { background: #0d2218; color: #39d353; border: 1px solid #0b6e4f55; }
+.pill-red    { background: #2d0a0a; color: #f85149; border: 1px solid #da363355; }
+
+/* ── step sequence ── */
+.step-num {
+  min-width: 20px; height: 20px; border-radius: 50%;
+  background: #30363d; color: #e6edf3;
+  font-size: 10px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-right: 6px;
+}
+.step-num.purple { background: #8957e5; }
+.step-num.yellow { background: #9e6a03; }
+.step-num.green  { background: #238636; }
+.step-num.blue   { background: #1f6feb; }
+.step-num.teal   { background: #0b6e4f; }
+
+/* ── code block ── */
+.code-block {
+  background: #010409; border: 1px solid #30363d; border-radius: 6px;
+  padding: 8px 10px; font-family: monospace; font-size: 10px;
+  line-height: 1.6; color: #e6edf3;
+}
+.c-key  { color: #79c0ff; }
+.c-str  { color: #a5d6ff; }
+.c-num  { color: #3fb950; }
+.c-tag  { color: #7ee787; }
+.c-attr { color: #79c0ff; }
+.c-val  { color: #a5d6ff; }
+
+/* ── divider ── */
+.divider { width: 2px; background: #30363d; margin: 0 4px; align-self: stretch; border-radius: 2px; }
+
+/* ── compare banner ── */
+.compare-banner {
+  display: flex; gap: 0; margin-bottom: 28px;
+  border: 1px solid #30363d; border-radius: 10px; overflow: hidden;
+}
+.compare-half {
+  flex: 1; padding: 12px 16px;
+}
+.compare-out { background: #0c1d3a; border-right: 1px solid #30363d; }
+.compare-in  { background: #1a0d2e; }
+.compare-title { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+.compare-flow { font-size: 11px; color: #8b949e; line-height: 2; }
+
+/* ── new route badge ── */
+.badge-new {
+  display: inline-block; background: #0d2d0f; color: #3fb950;
+  border: 1px solid #23863655; border-radius: 4px; padding: 2px 8px;
+  font-size: 10px; font-weight: 700;
+}
+.badge-mirror {
+  display: inline-block; background: #1a0d2e; color: #bc8cff;
+  border: 1px solid #8957e555; border-radius: 4px; padding: 2px 8px;
+  font-size: 10px; font-weight: 700;
+}
+
+/* ── security note ── */
+.security-note {
+  border: 1px solid #da363355; background: #2d0a0a; border-radius: 8px;
+  padding: 10px 14px; font-size: 11px; margin-top: 8px;
+}
+</style>
+</head>
+<body>
+
+<h1>PAS-SCADA Kafka Bridge — Inbound Architecture</h1>
+<p class="subtitle">Pink Line Project &nbsp;·&nbsp; External System → EBI Screen &nbsp;·&nbsp; Reverse Direction</p>
+<div class="direction-badge">
+  <span class="dir-pill">⬆ INBOUND &nbsp;—&nbsp; External System sends data to EBI Screen / TMS</span>
+</div>
+
+<!-- ── COMPARE BANNER ── -->
+<div class="compare-banner">
+  <div class="compare-half compare-out">
+    <div class="compare-title" style="color:#58a6ff">⬇ OUTBOUND (existing) — EBI Screen → External</div>
+    <div class="compare-flow">
+      <span style="color:#58a6ff">TMS / EBI Screen</span><br>
+      &nbsp;&nbsp;↓ publishes XML<br>
+      <span style="color:#58a6ff">ActiveMQ Artemis</span> (topics: TMS.PISInfo, TSInfo…)<br>
+      &nbsp;&nbsp;↓ Bridge subscribes<br>
+      <span style="color:#3fb950">Kafka Bridge</span> (XML→JSON → AES-256-GCM encrypt)<br>
+      &nbsp;&nbsp;↓ publishes<br>
+      <span style="color:#e3b341">Kafka</span> topic: <code>tms.scada.encrypted</code><br>
+      &nbsp;&nbsp;↓ Bridge forwards<br>
+      <span style="color:#bc8cff">RabbitMQ / MQTT</span> routing key: <code>tms.scada.pas</code><br>
+      &nbsp;&nbsp;↓ consumed by<br>
+      <span style="color:#8b949e">External SCADA system</span>
+    </div>
+  </div>
+  <div class="compare-half compare-in">
+    <div class="compare-title" style="color:#bc8cff">⬆ INBOUND (requested) — External → EBI Screen</div>
+    <div class="compare-flow">
+      <span style="color:#8b949e">External system</span> (SCADA, command sender)<br>
+      &nbsp;&nbsp;↓ publishes encrypted JSON<br>
+      <span style="color:#bc8cff">RabbitMQ / MQTT</span> routing key: <code>scada.tms.commands</code><br>
+      &nbsp;&nbsp;↓ Bridge subscribes<br>
+      <span style="color:#e3b341">Kafka</span> topic: <code>scada.tms.inbound</code><br>
+      &nbsp;&nbsp;↓ Bridge processes<br>
+      <span style="color:#3fb950">Kafka Bridge</span> (AES-256-GCM decrypt → JSON→XML)<br>
+      &nbsp;&nbsp;↓ publishes<br>
+      <span style="color:#58a6ff">ActiveMQ Artemis</span> (queue: TMS.Commands)<br>
+      &nbsp;&nbsp;↓ consumed by<br>
+      <span style="color:#39d353">TMS / EBI Screen</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     ZONE 1 — EXTERNAL SYSTEM
+════════════════════════════════════════════════════════════════ -->
+<div class="zone zone-ext">
+  <div class="zone-label">ZONE 1 — EXTERNAL SYSTEM (Command Sender)</div>
+  <div class="row" style="padding-top:24px; align-items:center;">
+
+    <div class="box box-purple" style="min-width:200px">
+      <div class="box-title">🖥 External SCADA System</div>
+      <div class="box-sub">Command / update originator</div>
+      <div class="box-body">
+        Sends commands or data updates<br>
+        destined for the EBI Screen / TMS.<br>
+        <br>
+        Examples:<br>
+        • Schedule override / timetable update<br>
+        • Train hold / door command<br>
+        • Emergency broadcast trigger<br>
+        • Configuration push
+      </div>
+    </div>
+
+    <div style="font-size:24px; color:#bc8cff; padding: 0 12px;">→</div>
+
+    <div class="box box-purple" style="flex:1">
+      <div class="box-title">📤 Message Publication</div>
+      <div class="box-sub">External system publishes an AES-256-GCM encrypted JSON message</div>
+      <div style="display:flex; gap:10px; margin-top:8px;">
+        <div style="flex:1">
+          <div style="font-size:10px; color:#8b949e; margin-bottom:4px;">RabbitMQ / MQTT target:</div>
+          <div class="pill pill-purple">Exchange: amq.topic</div><br>
+          <div class="pill pill-purple">Routing key: scada.tms.commands</div>
+          <div style="font-size:10px; color:#8b949e; margin-top:8px;">OR direct to Kafka:</div>
+          <div class="pill pill-yellow">Topic: scada.tms.inbound</div>
+        </div>
+        <div style="flex:1.4">
+          <div style="font-size:10px; color:#8b949e; margin-bottom:4px;">Payload format (encrypted):</div>
+          <div class="code-block">
+<span style="color:#8b949e">// Wire format (same as outbound)</span><br>
+<span style="color:#bc8cff">Byte 0–11  :</span> IV (12 bytes, random)<br>
+<span style="color:#bc8cff">Byte 12–end:</span> AES-256-GCM ciphertext<br>
+<span style="color:#8b949e">             + 16-byte GCM auth tag</span><br>
+<br>
+<span style="color:#8b949e">// After decryption — JSON command:</span><br>
+{<br>
+&nbsp;<span class="c-key">"messageType"</span>: <span class="c-str">"SCADA_TMS_CMD"</span>,<br>
+&nbsp;<span class="c-key">"timestamp"</span>: <span class="c-str">"2026-04-13T09:00Z"</span>,<br>
+&nbsp;<span class="c-key">"command"</span>: <span class="c-str">"HOLD_TRAIN"</span>,<br>
+&nbsp;<span class="c-key">"trainId"</span>: <span class="c-str">"guid-6250"</span>,<br>
+&nbsp;<span class="c-key">"platformId"</span>: <span class="c-str">"PL2201"</span><br>
+}
+          </div>
+        </div>
+      </div>
+      <div class="security-note">
+        <b style="color:#f85149">🔒 Security:</b> Same AES-256-GCM key shared via <code>SCADA_AES_KEY</code> env var.
+        External system must encrypt using the same key. GCM tag provides tamper detection —
+        any modified message is automatically rejected by the Bridge.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- connector -->
+<div class="connector">
+  <div class="arrow-down"><div class="arr-line"></div><div class="arr-head"></div></div>
+  <span>Encrypted message delivered via RabbitMQ/MQTT or directly to Kafka</span>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     ZONE 2 — KAFKA (optional staging)
+════════════════════════════════════════════════════════════════ -->
+<div class="zone zone-kafka">
+  <div class="zone-label">ZONE 2 — KAFKA (Inbound Staging &amp; Replay Buffer)</div>
+  <div class="row" style="padding-top:24px; align-items:center;">
+
+    <div class="box box-yellow" style="flex:1">
+      <div class="box-title">⚡ Kafka Topic: <code>scada.tms.inbound</code></div>
+      <div class="box-sub">Inbound command buffer — mirrors the outbound pattern</div>
+      <div style="display:flex; gap:12px; margin-top:6px;">
+        <div style="flex:1">
+          <div style="font-size:11px; font-weight:700; margin-bottom:6px; color:#e3b341;">Why Kafka for inbound?</div>
+          <div style="font-size:11px; line-height:1.9;">
+            ✔ Replay if TMS is temporarily offline<br>
+            ✔ Audit trail — all inbound commands retained<br>
+            ✔ Multiple consumers (Bridge + logger + monitor)<br>
+            ✔ Decouples external system from Artemis uptime
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div style="flex:1">
+          <div style="font-size:11px; font-weight:700; margin-bottom:6px; color:#e3b341;">Route option A — via RabbitMQ first:</div>
+          <div style="font-size:10px; color:#8b949e;">RabbitMQ (scada.tms.commands)<br>→ Bridge Route 3<br>→ Kafka (scada.tms.inbound)<br>→ Bridge Route 4<br>→ Artemis</div>
+          <div style="font-size:11px; font-weight:700; margin-top:8px; margin-bottom:6px; color:#e3b341;">Route option B — direct to Kafka:</div>
+          <div style="font-size:10px; color:#8b949e;">Kafka (scada.tms.inbound)<br>→ Bridge Route 3<br>→ Artemis</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- connector -->
+<div class="connector">
+  <div class="arrow-down"><div class="arr-line"></div><div class="arr-head"></div></div>
+  <span>Bridge consumes from Kafka inbound topic</span>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     ZONE 3 — BRIDGE APP (NEW INBOUND ROUTES)
+════════════════════════════════════════════════════════════════ -->
+<div class="zone zone-bridge">
+  <div class="zone-label">ZONE 3 — PAS-SCADA-Kafka-Bridge — New Inbound Routes</div>
+  <div style="padding:24px 20px 16px; display:flex; flex-direction:column; gap:12px;">
+
+    <!-- Route 3 -->
+    <div class="box box-green">
+      <div class="box-title" style="color:#3fb950">
+        ⚙️ Camel Route 3 — RabbitMQ → Kafka &nbsp;
+        <span style="font-size:10px; font-family:monospace; color:#8b949e">route-rabbitmq-to-kafka-inbound</span>
+        &nbsp;<span class="badge-new">NEW</span>
+      </div>
+      <div style="font-size:11px; color:#8b949e; margin-bottom:8px;">
+        Mirror of Route 2 (outbound) — but in reverse. Receives from RabbitMQ, stages to Kafka.
+        Only needed if external system uses RabbitMQ/MQTT as entry point.
+      </div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <div class="box box-gray" style="flex:1; min-width:160px;">
+          <div style="font-size:11px; font-weight:700; color:#3fb950; margin-bottom:4px;">
+            <span class="step-num purple">1</span> from(rabbitmq)
+          </div>
+          <div style="font-size:10px; color:#8b949e;">Subscribe to RabbitMQ</div>
+          <div class="pill pill-purple" style="margin-top:4px;">amq.topic / scada.tms.commands</div>
+        </div>
+        <div style="font-size:20px; color:#bc8cff;">→</div>
+        <div class="box box-gray" style="flex:1; min-width:160px;">
+          <div style="font-size:11px; font-weight:700; color:#3fb950; margin-bottom:4px;">
+            <span class="step-num purple">2</span> to(kafka)
+          </div>
+          <div style="font-size:10px; color:#8b949e;">Forward raw encrypted bytes to Kafka</div>
+          <div class="pill pill-yellow" style="margin-top:4px;">scada.tms.inbound</div>
+          <div style="font-size:10px; color:#8b949e; margin-top:4px;">No decrypt here — just stage</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Route 4 -->
+    <div class="box box-green">
+      <div class="box-title" style="color:#3fb950">
+        ⚙️ Camel Route 4 — Kafka → Artemis &nbsp;
+        <span style="font-size:10px; font-family:monospace; color:#8b949e">route-kafka-inbound-to-artemis</span>
+        &nbsp;<span class="badge-new">NEW</span>
+      </div>
+      <div style="font-size:11px; color:#8b949e; margin-bottom:8px;">
+        Mirror of Route 1 (outbound) — but in reverse. Reads from Kafka, decrypts, converts JSON → XML, publishes to Artemis for TMS.
+      </div>
+      <div style="display:flex; gap:8px; align-items:flex-start;">
+
+        <!-- Step 1 -->
+        <div class="box box-gray" style="flex:1">
+          <div style="font-size:11px; font-weight:700; color:#3fb950; margin-bottom:6px;">
+            <span class="step-num yellow">1</span> from(kafka)
+          </div>
+          <div style="font-size:10px; color:#8b949e; margin-bottom:4px;">Read encrypted bytes from Kafka</div>
+          <div class="pill pill-yellow">scada.tms.inbound</div>
+          <div style="font-size:10px; color:#8b949e; margin-top:4px;">groupId: pas-bridge-inbound</div>
+        </div>
+
+        <div style="font-size:20px; color:#3fb950; padding-top:20px;">→</div>
+
+        <!-- Step 2 -->
+        <div class="box box-gray" style="flex:1">
+          <div style="font-size:11px; font-weight:700; color:#3fb950; margin-bottom:6px;">
+            <span class="step-num yellow">2</span> DecryptProcessor
+          </div>
+          <div style="font-size:10px; color:#8b949e; margin-bottom:4px;">AES-256-GCM decrypt</div>
+          <div style="font-size:10px;">Mirror of EncryptProcessor</div>
+          <div style="font-size:10px; color:#8b949e; margin-top:4px;">Same key: SCADA_AES_KEY</div>
+          <div style="font-size:10px; color:#f85149; margin-top:4px;">❌ Tampered → reject</div>
+        </div>
+
+        <div style="font-size:20px; color:#3fb950; padding-top:20px;">→</div>
+
+        <!-- Step 3 -->
+        <div class="box box-gray" style="flex:1">
+          <div style="font-size:11px; font-weight:700; color:#3fb950; margin-bottom:6px;">
+            <span class="step-num yellow">3</span> JsonToXmlProcessor
+          </div>
+          <div style="font-size:10px; color:#8b949e; margin-bottom:4px;">Mirror of XmlToJsonProcessor</div>
+          <div style="font-size:10px;">JSON command → XML<br>that TMS understands</div>
+          <div class="code-block" style="margin-top:6px; font-size:9px;">
+<span class="c-tag">&lt;TMSCommand&gt;</span><br>
+&nbsp;<span class="c-tag">&lt;type&gt;</span><span class="c-val">HOLD_TRAIN</span><span class="c-tag">&lt;/type&gt;</span><br>
+&nbsp;<span class="c-tag">&lt;trainId&gt;</span><span class="c-val">guid-6250</span><span class="c-tag">&lt;/trainId&gt;</span><br>
+&nbsp;<span class="c-tag">&lt;platformId&gt;</span><span class="c-val">PL2201</span><span class="c-tag">&lt;/platformId&gt;</span><br>
+<span class="c-tag">&lt;/TMSCommand&gt;</span>
+          </div>
+        </div>
+
+        <div style="font-size:20px; color:#3fb950; padding-top:20px;">→</div>
+
+        <!-- Step 4 -->
+        <div class="box box-gray" style="flex:1">
+          <div style="font-size:11px; font-weight:700; color:#3fb950; margin-bottom:6px;">
+            <span class="step-num yellow">4</span> to(artemis)
+          </div>
+          <div style="font-size:10px; color:#8b949e; margin-bottom:4px;">Publish XML to Artemis queue</div>
+          <div class="pill pill-blue" style="margin-bottom:4px;">TMS.Commands</div>
+          <div style="font-size:10px; color:#8b949e;">TMS subscribes and<br>forwards to EBI Screen</div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- connector -->
+<div class="connector">
+  <div class="arrow-down"><div class="arr-line"></div><div class="arr-head"></div></div>
+  <span>Bridge publishes XML command to Artemis → TMS picks it up</span>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     ZONE 4 — ARTEMIS (TMS side)
+════════════════════════════════════════════════════════════════ -->
+<div class="zone zone-artemis">
+  <div class="zone-label">ZONE 4 — ACTIVEMQ ARTEMIS (TMS Side)&nbsp;&nbsp;10.12.1.13 : 61616</div>
+  <div class="row" style="padding-top:24px; align-items:center;">
+
+    <div class="box box-blue" style="flex:1">
+      <div class="box-title">📨 ActiveMQ Artemis — Inbound Queue</div>
+      <div class="box-sub">New queue for commands coming from external systems</div>
+      <div style="display:flex; gap:12px; margin-top:6px;">
+        <div style="flex:1">
+          <div style="font-size:11px; font-weight:700; color:#58a6ff; margin-bottom:6px;">New queue (inbound):</div>
+          <div class="pill pill-blue">TMS.Commands</div>
+          <div style="font-size:10px; color:#8b949e; margin-top:6px; line-height:1.7;">
+            TMS Server subscribes to this queue.<br>
+            Receives XML commands from Bridge.<br>
+            Forwards to EBI Screen as needed.
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div style="flex:1.5">
+          <div style="font-size:11px; font-weight:700; color:#58a6ff; margin-bottom:6px;">Existing outbound topics (unchanged):</div>
+          <div class="pill pill-blue">TMS.PISInfo</div>
+          <div class="pill pill-blue">RCS.E2K.TMS.TrafficReportClient</div>
+          <div class="pill pill-blue">TSInfo</div>
+          <div class="pill pill-blue">RCS.E2K.TMS.RouteInfo</div>
+          <div style="font-size:10px; color:#8b949e; margin-top:4px;">These remain untouched — outbound only</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- connector -->
+<div class="connector">
+  <div class="arrow-down"><div class="arr-line"></div><div class="arr-head"></div></div>
+  <span>TMS Server subscribes and routes command to EBI Screen</span>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     ZONE 5 — TMS / EBI SCREEN
+════════════════════════════════════════════════════════════════ -->
+<div class="zone zone-tms">
+  <div class="zone-label">ZONE 5 — TMS SERVER &amp; EBI SCREEN</div>
+  <div class="row" style="padding-top:24px; align-items:center;">
+
+    <div class="box box-blue" style="min-width:180px">
+      <div class="box-title">🚆 TMS Server</div>
+      <div class="box-sub">Train Management System</div>
+      <div class="box-body">
+        Subscribes to Artemis<br>
+        <span class="pill pill-blue">TMS.Commands</span><br>
+        <br>
+        Processes incoming XML<br>
+        and relays to EBI Screen
+      </div>
+    </div>
+
+    <div style="font-size:24px; color:#39d353; padding: 0 12px;">→</div>
+
+    <div class="box box-teal" style="flex:1">
+      <div class="box-title">🖥 EBI Screen (Honeywell)</div>
+      <div class="box-sub">SCADA Operator Workstation — destination of inbound data</div>
+      <div style="display:flex; gap:12px; margin-top:6px;">
+        <div style="flex:1">
+          <div style="font-size:11px; font-weight:700; color:#39d353; margin-bottom:6px;">What the operator sees:</div>
+          <div style="font-size:11px; line-height:1.9;">
+            ✔ Command acknowledgement on screen<br>
+            ✔ Updated timetable / schedule<br>
+            ✔ Train hold status indicator<br>
+            ✔ Emergency alert display<br>
+            ✔ Real-time status from external system
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div style="flex:1">
+          <div style="font-size:11px; font-weight:700; color:#39d353; margin-bottom:6px;">EBI Screen role in this system:</div>
+          <div style="font-size:11px; line-height:1.9;">
+            <b>Outbound:</b> EBI data source → external<br>
+            <span style="color:#8b949e; font-size:10px;">TMS publishes → Bridge → Kafka → SCADA</span><br>
+            <br>
+            <b>Inbound (new):</b> External → EBI display<br>
+            <span style="color:#8b949e; font-size:10px;">SCADA → RabbitMQ → Kafka → Bridge → Artemis → TMS → EBI</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     FULL FLOW SUMMARY
+════════════════════════════════════════════════════════════════ -->
+<div style="margin-top: 28px; border: 1px solid #30363d; border-radius: 10px; padding: 20px; background: #161b22;">
+  <div style="font-size:14px; font-weight:700; color:#e6edf3; margin-bottom:14px;">Complete Bidirectional Flow Summary</div>
+
+  <div style="display:flex; gap:16px;">
+
+    <!-- Outbound -->
+    <div style="flex:1; background:#0c1d3a; border:1px solid #1f6feb55; border-radius:8px; padding:14px;">
+      <div style="font-size:12px; font-weight:700; color:#58a6ff; margin-bottom:10px;">⬇ OUTBOUND (existing) — EBI → External</div>
+      <div style="font-size:11px; line-height:2; color:#e6edf3;">
+        <span style="color:#58a6ff">1.</span> TMS publishes XML → <span style="color:#58a6ff">Artemis topics</span><br>
+        <span style="color:#3fb950">2.</span> Bridge Route 1: Artemis → XML→JSON + Encrypt → <span style="color:#e3b341">Kafka</span> <code>tms.scada.encrypted</code><br>
+        <span style="color:#3fb950">3.</span> Bridge Route 2: <span style="color:#e3b341">Kafka</span> → <span style="color:#bc8cff">RabbitMQ</span> <code>tms.scada.pas</code><br>
+        <span style="color:#8b949e">4.</span> External SCADA consumes from RabbitMQ/MQTT
+      </div>
+    </div>
+
+    <!-- Inbound -->
+    <div style="flex:1; background:#1a0d2e; border:1px solid #8957e555; border-radius:8px; padding:14px;">
+      <div style="font-size:12px; font-weight:700; color:#bc8cff; margin-bottom:10px;">⬆ INBOUND (new) — External → EBI</div>
+      <div style="font-size:11px; line-height:2; color:#e6edf3;">
+        <span style="color:#8b949e">1.</span> External SCADA publishes encrypted JSON → <span style="color:#bc8cff">RabbitMQ</span> <code>scada.tms.commands</code><br>
+        <span style="color:#3fb950">2.</span> Bridge Route 3 <span class="badge-new" style="font-size:9px;">NEW</span>: <span style="color:#bc8cff">RabbitMQ</span> → <span style="color:#e3b341">Kafka</span> <code>scada.tms.inbound</code><br>
+        <span style="color:#3fb950">3.</span> Bridge Route 4 <span class="badge-new" style="font-size:9px;">NEW</span>: <span style="color:#e3b341">Kafka</span> → Decrypt + JSON→XML → <span style="color:#58a6ff">Artemis</span> <code>TMS.Commands</code><br>
+        <span style="color:#39d353">4.</span> TMS receives XML → forwards to <span style="color:#39d353">EBI Screen</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     WHAT NEEDS TO BE BUILT
+════════════════════════════════════════════════════════════════ -->
+<div style="margin-top: 20px; border: 1px solid #23863655; border-radius: 10px; padding: 20px; background: #0d2d0f;">
+  <div style="font-size:14px; font-weight:700; color:#3fb950; margin-bottom:12px;">What needs to be built for inbound direction</div>
+  <div style="display:flex; gap:12px; flex-wrap:wrap;">
+    <div class="box box-gray" style="flex:1; min-width:180px;">
+      <div style="font-size:11px; font-weight:700; color:#3fb950; margin-bottom:6px;">1. DecryptProcessor.java</div>
+      <div style="font-size:10px; color:#8b949e;">Mirror of EncryptProcessor.<br>AES-256-GCM decrypt.<br>Reference code already exists in DecryptExample.java</div>
+    </div>
+    <div class="box box-gray" style="flex:1; min-width:180px;">
+      <div style="font-size:11px; font-weight:700; color:#3fb950; margin-bottom:6px;">2. JsonToXmlProcessor.java</div>
+      <div style="font-size:10px; color:#8b949e;">Mirror of XmlToJsonProcessor.<br>Jackson XmlMapper: JSON → POJO → XML.<br>Define inbound message model.</div>
+    </div>
+    <div class="box box-gray" style="flex:1; min-width:180px;">
+      <div style="font-size:11px; font-weight:700; color:#3fb950; margin-bottom:6px;">3. Route 3 + Route 4 in KafkaBridgeRoutes.java</div>
+      <div style="font-size:10px; color:#8b949e;">Add RabbitMQ→Kafka (Route 3)<br>and Kafka→Artemis (Route 4)<br>to existing route builder.</div>
+    </div>
+    <div class="box box-gray" style="flex:1; min-width:180px;">
+      <div style="font-size:11px; font-weight:700; color:#3fb950; margin-bottom:6px;">4. Confirm with TMS team</div>
+      <div style="font-size:10px; color:#8b949e;">Agree on:<br>• Queue name (TMS.Commands)<br>• XML schema TMS expects<br>• Which commands are supported</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

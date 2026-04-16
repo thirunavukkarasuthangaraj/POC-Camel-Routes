@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PAS-SCADA Kafka Bridge — Architecture</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', sans-serif; background: #0d1117; color: #e6edf3; padding: 24px; }
+
+h1 { font-size: 20px; color: #58a6ff; text-align: center; margin-bottom: 4px; }
+.subtitle { text-align: center; color: #8b949e; font-size: 13px; margin-bottom: 28px; }
+
+/* ── ZONE wrappers ── */
+.zone {
+  border: 2px solid #30363d; border-radius: 12px;
+  margin-bottom: 0; position: relative;
+}
+.zone-label {
+  position: absolute; top: -13px; left: 16px;
+  background: #0d1117; padding: 0 8px;
+  font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+}
+
+/* zone colours */
+.zone-tms     { border-color: #1f6feb; }
+.zone-tms .zone-label     { color: #58a6ff; }
+.zone-bridge  { border-color: #238636; }
+.zone-bridge .zone-label  { color: #3fb950; }
+.zone-kafka   { border-color: #d29922; }
+.zone-kafka .zone-label   { color: #e3b341; }
+.zone-rabbit  { border-color: #8957e5; }
+.zone-rabbit .zone-label  { color: #bc8cff; }
+.zone-scada   { border-color: #0b6e4f; }
+.zone-scada .zone-label   { color: #39d353; }
+
+/* ── CONNECTOR arrows between zones ── */
+.connector {
+  display: flex; align-items: center; justify-content: center;
+  padding: 6px 0; gap: 8px; font-size: 11px; color: #8b949e;
+}
+.arrow-down {
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+}
+.arr-line { width: 2px; height: 24px; background: #30363d; }
+.arr-head { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 10px solid #30363d; }
+
+/* ── ROW inside a zone ── */
+.row { display: flex; align-items: stretch; gap: 12px; padding: 16px 20px; }
+.row-col { display: flex; flex-direction: column; gap: 8px; }
+
+/* ── BOX ── */
+.box {
+  border: 1px solid #30363d; border-radius: 8px;
+  background: #161b22; padding: 12px 14px;
+}
+.box-title {
+  font-size: 13px; font-weight: 700; margin-bottom: 4px;
+  display: flex; align-items: center; gap: 6px;
+}
+.box-sub  { font-size: 11px; color: #8b949e; margin-bottom: 6px; }
+.box-body { font-size: 11px; color: #e6edf3; line-height: 1.7; }
+
+/* colours */
+.box-blue   { border-color: #1f6feb; background: #0c1d3a; }
+.box-green  { border-color: #238636; background: #0d2d0f; }
+.box-yellow { border-color: #d29922; background: #1f1400; }
+.box-purple { border-color: #8957e5; background: #1a0d2e; }
+.box-teal   { border-color: #0b6e4f; background: #0d2218; }
+.box-gray   { border-color: #30363d; background: #161b22; }
+.box-red    { border-color: #da3633; background: #2d0a0a; }
+
+/* ── inline arrow ── */
+.arr-right {
+  display: inline-flex; align-items: center;
+  color: #58a6ff; font-size: 16px; margin: 0 6px;
+}
+
+/* ── pill ── */
+.pill {
+  display: inline-block; border-radius: 4px; padding: 1px 7px;
+  font-size: 10px; font-family: monospace; font-weight: 600;
+  margin: 1px 0;
+}
+.pill-blue   { background: #1c2d3a; color: #58a6ff; border: 1px solid #1f6feb55; }
+.pill-green  { background: #0d2d0f; color: #3fb950; border: 1px solid #23863655; }
+.pill-yellow { background: #1f1400; color: #e3b341; border: 1px solid #d2992255; }
+.pill-purple { background: #1a0d2e; color: #bc8cff; border: 1px solid #8957e555; }
+.pill-red    { background: #2d0a0a; color: #f85149; border: 1px solid #da363355; }
+
+/* ── step sequence ── */
+.steps { display: flex; flex-direction: column; gap: 4px; }
+.step  { display: flex; align-items: flex-start; gap: 6px; font-size: 11px; }
+.step-num {
+  min-width: 18px; height: 18px; border-radius: 50%;
+  background: #30363d; color: #e6edf3;
+  font-size: 10px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.step-num.blue   { background: #1f6feb; }
+.step-num.green  { background: #238636; }
+.step-num.yellow { background: #9e6a03; }
+.step-num.purple { background: #8957e5; }
+.step-num.teal   { background: #0b6e4f; }
+
+/* ── divider ── */
+.divider { width: 2px; background: #30363d; margin: 0 4px; align-self: stretch; border-radius: 2px; }
+.divider-blue   { background: #1f6feb55; }
+.divider-green  { background: #23863655; }
+.divider-yellow { background: #d2992255; }
+.divider-purple { background: #8957e555; }
+.divider-teal   { background: #0b6e4f55; }
+
+/* ── wire format ── */
+.wire { display: flex; margin: 6px 0; border-radius: 4px; overflow: hidden; font-size: 10px; font-family: monospace; }
+.wire-seg { padding: 6px 8px; text-align: center; }
+
+/* ── XML/JSON preview ── */
+.code-block {
+  background: #010409; border: 1px solid #30363d; border-radius: 6px;
+  padding: 8px 10px; font-family: monospace; font-size: 10px;
+  line-height: 1.6; color: #e6edf3;
+}
+.c-tag  { color: #7ee787; }
+.c-attr { color: #79c0ff; }
+.c-val  { color: #a5d6ff; }
+.c-key  { color: #79c0ff; }
+.c-str  { color: #a5d6ff; }
+.c-num  { color: #3fb950; }
+.c-bool { color: #e3b341; }
+
+/* ── NOT TOUCHED badge ── */
+.badge-nt {
+  display: inline-block; background: #2d0a0a; color: #f85149;
+  border: 1px solid #da363355; border-radius: 4px; padding: 2px 8px;
+  font-size: 10px; font-weight: 700;
+}
+.badge-new {
+  display: inline-block; background: #0d2d0f; color: #3fb950;
+  border: 1px solid #23863655; border-radius: 4px; padding: 2px 8px;
+  font-size: 10px; font-weight: 700;
+}
+</style>
+</head>
+<body>
+
+<h1>PAS-SCADA Kafka Bridge — Complete Architecture</h1>
+<p class="subtitle">Pink Line Project &nbsp;·&nbsp; TMS → SCADA Integration &nbsp;·&nbsp; Solution 4 (Kafka) &nbsp;·&nbsp; Bala Approved</p>
+
+<!-- ══════════════════════════════════════════════════════════════
+     ZONE 1 — TMS SIDE
+═══════════════════════════════════════════════════════════════ -->
+<div class="zone zone-tms">
+  <div class="zone-label">ZONE 1 — TMS SIDE (Pink Line)</div>
+  <div class="row" style="padding-top:24px">
+
+    <!-- TMS Server -->
+    <div class="box box-blue" style="min-width:160px">
+      <div class="box-title">🚆 TMS Server</div>
+      <div class="box-sub">Train Management System</div>
+      <div class="box-body">
+        Publishes XML messages<br>automatically to Artemis<br>
+        <br><b>No code changes</b>
+      </div>
+    </div>
+
+    <div class="divider divider-blue"></div>
+
+    <!-- Artemis -->
+    <div class="box box-blue" style="flex:1">
+      <div class="box-title">📨 ActiveMQ Artemis &nbsp;<span style="font-size:11px;color:#8b949e">10.12.1.13 : 61616</span></div>
+      <div class="box-sub">JMS Message Broker — already running at client site</div>
+      <div class="row" style="padding:0; gap:8px">
+        <div style="flex:1">
+          <div style="font-size:11px;color:#8b949e;margin-bottom:4px">4 Topics (XML published by TMS):</div>
+          <div class="pill pill-blue">TMS.PISInfo</div>
+          <div style="font-size:10px;color:#8b949e;margin-left:4px;margin-bottom:4px">ATRTimeTable V3 — timetable with arrival/departure</div>
+          <div class="pill pill-blue">RCS.E2K.TMS.TrafficReportClient</div>
+          <div style="font-size:10px;color:#8b949e;margin-left:4px;margin-bottom:4px">SingleArrival V2 / SingleDeparture V2</div>
+          <div class="pill pill-blue">TSInfo</div>
+          <div style="font-size:10px;color:#8b949e;margin-left:4px;margin-bottom:4px">Active Scheduler Report</div>
+          <div class="pill pill-blue">RCS.E2K.TMS.RouteInfo</div>
+          <div style="font-size:10px;color:#8b949e;margin-left:4px">routeinfo V2 — train route stops</div>
+        </div>
+        <div class="divider divider-blue"></div>
+        <div style="flex:1">
+          <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Both subscribers get independent XML copy:</div>
+          <div class="box box-red" style="padding:8px;margin-bottom:6px">
+            <div style="font-size:11px;font-weight:700">📦 PASInfoConverter</div>
+            <div style="font-size:10px;color:#8b949e">(GP Product)</div>
+            <div style="font-size:10px;margin-top:4px"><span class="badge-nt">NOT TOUCHED</span></div>
+            <div style="font-size:10px;color:#8b949e;margin-top:4px">Runs as-is. Zero changes.</div>
+          </div>
+          <div class="box box-green" style="padding:8px">
+            <div style="font-size:11px;font-weight:700">⚙️ PAS-SCADA-Kafka-Bridge</div>
+            <div style="font-size:10px;color:#8b949e">(Your new code)</div>
+            <div style="font-size:10px;margin-top:4px"><span class="badge-new">NEW SERVICE</span></div>
+            <div style="font-size:10px;color:#8b949e;margin-top:4px">Spring Boot + Apache Camel</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- connector -->
+<div class="connector">
+  <div class="arrow-down"><div class="arr-line"></div><div class="arr-head"></div></div>
+  <span>Bridge subscribes to all 4 Artemis topics (durable)</span>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     ZONE 2 — BRIDGE APP
+═══════════════════════════════════════════════════════════════ -->
+<div class="zone zone-bridge">
+  <div class="zone-label">ZONE 2 — PAS-SCADA-Kafka-Bridge (Spring Boot + Apache Camel)</div>
+  <div style="padding:24px 20px 16px; display:flex; flex-direction:column; gap:12px">
+
+    <!-- Camel Route 1 -->
+    <div class="box box-green">
+      <div class="box-title" style="color:#3fb950">⚙️ Camel Route 1 — Artemis → Kafka &nbsp;<span style="font-size:10px;font-family:monospace;color:#8b949e">route-tms-pisinfo-to-kafka (×4 routes)</span></div>
+      <div class="row" style="padding:10px 0 0; gap:10px; align-items:flex-start">
+
+        <!-- Step 1 -->
+        <div style="flex:1">
+          <div class="box box-gray">
+            <div style="font-size:11px;font-weight:700;color:#3fb950;margin-bottom:6px">
+              <span class="step-num green">1</span>&nbsp; from(artemis:topic)
+            </div>
+            <div style="font-size:10px;color:#8b949e;margin-bottom:6px">Receives XML string from Artemis topic</div>
+            <div class="code-block">
+<span class="c-tag">&lt;ATRTimeTable&gt;</span><br>
+&nbsp;<span class="c-tag">&lt;dateTime&gt;</span><span class="c-val">20260411T140000</span><span class="c-tag">&lt;/dateTime&gt;</span><br>
+&nbsp;<span class="c-tag">&lt;Trains&gt;&lt;Tg&gt;</span><br>
+&nbsp;&nbsp;<span class="c-tag">&lt;TTGUID&gt;</span><span class="c-val">guid-6250</span><span class="c-tag">&lt;/TTGUID&gt;</span><br>
+&nbsp;&nbsp;<span class="c-tag">&lt;TripNo&gt;</span><span class="c-val">678</span><span class="c-tag">&lt;/TripNo&gt;</span><br>
+&nbsp;&nbsp;<span class="c-tag">&lt;CTD</span> <span class="c-attr">lpid=</span><span class="c-val">"101"</span> <span class="c-attr">tn=</span><span class="c-val">"678"</span><span class="c-tag">/&gt;</span><br>
+&nbsp;&nbsp;<span class="c-tag">&lt;Evts</span> <span class="c-attr">F=</span><span class="c-val">"3"</span> <span class="c-attr">Id=</span><span class="c-val">"2201"</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-attr">As=</span><span class="c-val">"3600"</span> <span class="c-attr">Ds=</span><span class="c-val">"3660"</span><span class="c-tag">/&gt;</span><br>
+&nbsp;<span class="c-tag">&lt;/Tg&gt;&lt;/Trains&gt;</span><br>
+<span class="c-tag">&lt;/ATRTimeTable&gt;</span>
+            </div>
+            <div style="font-size:10px;color:#8b949e;margin-top:4px">Header: rcsschema=RCS.E2K.TMS.ATRTimeTableMsg.V3</div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;padding-top:30px;font-size:20px;color:#3fb950">→</div>
+
+        <!-- Step 2 -->
+        <div style="flex:1.4">
+          <div class="box box-gray">
+            <div style="font-size:11px;font-weight:700;color:#3fb950;margin-bottom:6px">
+              <span class="step-num green">2</span>&nbsp; XmlToJsonProcessor
+            </div>
+            <div style="font-size:10px;color:#8b949e;margin-bottom:6px">Jackson XmlMapper reads XML → POJO → ICD JSON automatically</div>
+            <div style="display:flex;gap:8px">
+              <div style="flex:1">
+                <div style="font-size:10px;color:#8b949e;margin-bottom:3px">XML POJO Models:</div>
+                <div style="font-size:10px">ATRTimeTable.java</div>
+                <div style="font-size:10px">SingleArrival.java</div>
+                <div style="font-size:10px">SingleDeparture.java</div>
+                <div style="font-size:10px">RouteInfo.java</div>
+                <div style="font-size:10px;color:#8b949e;margin-top:6px">Flags bitmask (Evts.F):</div>
+                <div style="font-size:10px">0x01 = arrival valid</div>
+                <div style="font-size:10px">0x02 = departure valid</div>
+                <div style="font-size:10px;color:#f85149">0x04 = history → SKIP</div>
+                <div style="font-size:10px;color:#f85149">0x20 = pass-thru → SKIP</div>
+              </div>
+              <div style="flex:1.3">
+                <div style="font-size:10px;color:#8b949e;margin-bottom:3px">ICD JSON output:</div>
+                <div class="code-block" style="font-size:9px">
+{<br>
+&nbsp;<span class="c-key">"schemaVersion"</span>: <span class="c-str">"1.0"</span>,<br>
+&nbsp;<span class="c-key">"messageType"</span>: <span class="c-str">"TMS_PAS_UPDATE"</span>,<br>
+&nbsp;<span class="c-key">"timestamp"</span>: <span class="c-str">"2026-04-11T14:00Z"</span>,<br>
+&nbsp;<span class="c-key">"header"</span>: {<br>
+&nbsp;&nbsp;<span class="c-key">"server"</span>: <span class="c-str">"RCS.E2K.PIS"</span>,<br>
+&nbsp;&nbsp;<span class="c-key">"health"</span>: <span class="c-num">1</span>,<br>
+&nbsp;&nbsp;<span class="c-key">"healthSeq"</span>: <span class="c-num">47</span><br>
+&nbsp;},<br>
+&nbsp;<span class="c-key">"platformPredictions"</span>: [{<br>
+&nbsp;&nbsp;<span class="c-key">"platformId"</span>: <span class="c-str">"PL2201"</span>,<br>
+&nbsp;&nbsp;<span class="c-key">"predictedTrains"</span>: [{<br>
+&nbsp;&nbsp;&nbsp;<span class="c-key">"slot"</span>: <span class="c-num">1</span>,<br>
+&nbsp;&nbsp;&nbsp;<span class="c-key">"trainId"</span>: <span class="c-str">"guid-6250"</span>,<br>
+&nbsp;&nbsp;&nbsp;<span class="c-key">"arrivalTime"</span>: <span class="c-num">3600</span>,<br>
+&nbsp;&nbsp;&nbsp;<span class="c-key">"departureTime"</span>: <span class="c-str">"15:01:00"</span>,<br>
+&nbsp;&nbsp;&nbsp;<span class="c-key">"status"</span>: <span class="c-num">0</span>,<br>
+&nbsp;&nbsp;&nbsp;<span class="c-key">"runNumber"</span>: <span class="c-num">678</span><br>
+&nbsp;&nbsp;}]<br>
+&nbsp;}]<br>
+}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;padding-top:30px;font-size:20px;color:#3fb950">→</div>
+
+        <!-- Step 3 -->
+        <div style="flex:1.2">
+          <div class="box box-gray">
+            <div style="font-size:11px;font-weight:700;color:#e3b341;margin-bottom:6px">
+              <span class="step-num yellow">3</span>&nbsp; EncryptProcessor
+            </div>
+            <div style="font-size:10px;color:#8b949e;margin-bottom:6px">AES-256-GCM — authenticated encryption</div>
+            <div style="font-size:10px;margin-bottom:4px">Key: <span class="pill pill-red">ENV: SCADA_AES_KEY</span></div>
+            <div style="font-size:10px;margin-bottom:6px">IV: 12 bytes, SecureRandom (fresh each msg)</div>
+            <div style="font-size:10px;color:#8b949e;margin-bottom:4px">Wire format byte[]:</div>
+            <div class="wire">
+              <div class="wire-seg" style="background:#1c2d3a;color:#58a6ff;flex:0.8">
+                <div style="font-weight:700">IV</div>
+                <div>12 bytes</div>
+                <div style="color:#8b949e">random</div>
+              </div>
+              <div class="wire-seg" style="background:#0d2d0f;color:#3fb950;flex:2">
+                <div style="font-weight:700">Ciphertext</div>
+                <div>Encrypted JSON</div>
+                <div style="color:#8b949e">AES-256-GCM</div>
+              </div>
+              <div class="wire-seg" style="background:#1f1400;color:#e3b341;flex:0.8">
+                <div style="font-weight:700">GCM Tag</div>
+                <div>16 bytes</div>
+                <div style="color:#8b949e">tamper detect</div>
+              </div>
+            </div>
+            <div style="font-size:10px;color:#8b949e;margin-top:4px">Output: byte[] → Exchange body</div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;padding-top:30px;font-size:20px;color:#3fb950">→</div>
+
+        <!-- Step 4 -->
+        <div style="flex:0.8">
+          <div class="box box-yellow" style="height:100%">
+            <div style="font-size:11px;font-weight:700;color:#e3b341;margin-bottom:6px">
+              <span class="step-num yellow">4</span>&nbsp; to(kafka)
+            </div>
+            <div style="font-size:10px;color:#8b949e;margin-bottom:6px">Publishes encrypted byte[]</div>
+            <div class="pill pill-yellow" style="margin-bottom:4px">tms.scada.encrypted</div><br>
+            <div style="font-size:10px">Broker: 10.12.1.14:9092</div>
+            <div style="font-size:10px">Auth: SASL/PLAIN</div>
+            <div style="font-size:10px">User: tms_bridge</div>
+            <div style="font-size:10px">Serializer: ByteArray</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Kafka stores -->
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:4px 0;font-size:11px;color:#e3b341">
+      <span>▼</span> Kafka stores encrypted messages durably on disk (24h retention) <span>▼</span>
+    </div>
+
+    <!-- Camel Route 2 -->
+    <div class="box box-green">
+      <div class="box-title" style="color:#3fb950">⚙️ Camel Route 2 — Kafka → RabbitMQ &nbsp;<span style="font-size:10px;font-family:monospace;color:#8b949e">route-kafka-to-rabbitmq</span></div>
+      <div class="row" style="padding:10px 0 0; gap:10px; align-items:flex-start">
+
+        <div style="flex:1">
+          <div class="box box-gray">
+            <div style="font-size:11px;font-weight:700;color:#e3b341;margin-bottom:4px"><span class="step-num yellow">5</span>&nbsp; from(kafka:tms.scada.encrypted)</div>
+            <div style="font-size:10px">Group ID: scada-bridge-consumer</div>
+            <div style="font-size:10px">Deserializer: ByteArrayDeserializer</div>
+            <div style="font-size:10px">Auto offset reset: latest</div>
+            <div style="font-size:10px;color:#8b949e;margin-top:4px">Reads encrypted byte[] from Kafka</div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;font-size:20px;color:#3fb950">→</div>
+
+        <div style="flex:1.5">
+          <div class="box box-gray">
+            <div style="font-size:11px;font-weight:700;color:#bc8cff;margin-bottom:4px"><span class="step-num purple">6</span>&nbsp; to(spring-rabbitmq:amq.topic)</div>
+            <div style="font-size:10px">Exchange: <span class="pill pill-purple">amq.topic</span></div>
+            <div style="font-size:10px">Routing key: <span class="pill pill-purple">tms.scada.pas</span></div>
+            <div style="font-size:10px">Host: 10.12.1.11 : 5672</div>
+            <div style="font-size:10px">User: tms_bridge (ENV: RABBITMQ_PASS)</div>
+            <div style="font-size:10px;color:#8b949e;margin-top:4px">Forwards encrypted bytes as-is — no decrypt here</div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;font-size:20px;color:#3fb950">→</div>
+
+        <div style="flex:1">
+          <div class="box box-red">
+            <div style="font-size:11px;font-weight:700;color:#f85149;margin-bottom:4px">⚠️ onException Handler</div>
+            <div style="font-size:10px">Max retries: 3</div>
+            <div style="font-size:10px">Retry delay: 2 seconds</div>
+            <div style="font-size:10px">Dead letter queue:</div>
+            <div class="pill pill-red">DLQ.kafka-bridge</div>
+            <div style="font-size:10px;color:#8b949e;margin-top:4px">No message lost silently</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- connector -->
+<div class="connector">
+  <div class="arrow-down"><div class="arr-line"></div><div class="arr-head"></div></div>
+  <span>AMQP · port 5672 · encrypted byte[]</span>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     ZONE 3 — KAFKA
+═══════════════════════════════════════════════════════════════ -->
+<div class="zone zone-kafka">
+  <div class="zone-label">ZONE 3 — Apache Kafka (NEW — Bala confirmed · 10.12.1.14:9092)</div>
+  <div class="row" style="padding-top:22px; gap:12px">
+
+    <div class="box box-yellow" style="flex:1">
+      <div class="box-title" style="color:#e3b341">🗄️ Topic: tms.scada.encrypted</div>
+      <div class="box-body">
+        <div style="display:flex;gap:16px">
+          <div>
+            <div style="color:#8b949e;font-size:10px;margin-bottom:3px">Config</div>
+            <div>Partitions: 1</div>
+            <div>Replication: 1 (prod: 3)</div>
+            <div>Retention: 24 hours</div>
+            <div>Data: encrypted byte[]</div>
+          </div>
+          <div>
+            <div style="color:#8b949e;font-size:10px;margin-bottom:3px">Producer ACL</div>
+            <div>User: tms_bridge</div>
+            <div>Op: WRITE</div>
+            <div style="color:#8b949e;font-size:10px;margin-top:6px;margin-bottom:3px">Consumer ACL</div>
+            <div>User: tms_bridge</div>
+            <div>Op: READ</div>
+            <div>Group: scada-bridge-consumer</div>
+          </div>
+          <div>
+            <div style="color:#8b949e;font-size:10px;margin-bottom:3px">Auth</div>
+            <div>Protocol: SASL_PLAINTEXT</div>
+            <div>Mechanism: PLAIN</div>
+            <div>User: tms_bridge</div>
+            <div>Pass: ENV KAFKA_PASS</div>
+          </div>
+          <div>
+            <div style="color:#8b949e;font-size:10px;margin-bottom:3px">Why Kafka?</div>
+            <div>If RabbitMQ goes down</div>
+            <div>→ messages held in Kafka</div>
+            <div>→ no data loss</div>
+            <div>→ resumes when back up</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- connector -->
+<div class="connector">
+  <div class="arrow-down"><div class="arr-line"></div><div class="arr-head"></div></div>
+  <span>AMQP · port 5672 · encrypted byte[] forwarded by Camel Route 2</span>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     ZONE 4 — RABBITMQ
+═══════════════════════════════════════════════════════════════ -->
+<div class="zone zone-rabbit">
+  <div class="zone-label">ZONE 4 — RabbitMQ (already at client · 10.12.1.11 · no changes)</div>
+  <div class="row" style="padding-top:22px; gap:12px">
+
+    <div class="box box-purple" style="flex:1">
+      <div class="box-title" style="color:#bc8cff">🐇 Exchange: amq.topic</div>
+      <div class="box-body">
+        <div style="display:flex;gap:16px">
+          <div>
+            <div style="color:#8b949e;font-size:10px;margin-bottom:3px">Receives from Bridge</div>
+            <div>Exchange: <span class="pill pill-purple">amq.topic</span></div>
+            <div>Routing key: <span class="pill pill-purple">tms.scada.pas</span></div>
+            <div>Delivery mode: 2 (persistent)</div>
+            <div>Content: encrypted byte[]</div>
+          </div>
+          <div>
+            <div style="color:#8b949e;font-size:10px;margin-bottom:3px">MQTT Plugin (built-in)</div>
+            <div>AMQP: tms.scada.pas</div>
+            <div>&nbsp;&nbsp;→ MQTT: tms/scada/pas</div>
+            <div>Dot(.) → Slash(/) conversion</div>
+            <div>Port: 8883 (MQTT TLS)</div>
+            <div>QoS: 1 (at least once)</div>
+          </div>
+          <div>
+            <div style="color:#8b949e;font-size:10px;margin-bottom:3px">Auth</div>
+            <div>User: tms_bridge</div>
+            <div>Pass: ENV RABBITMQ_PASS</div>
+            <div>Vhost: /</div>
+            <div>Permission: write amq.topic</div>
+          </div>
+          <div>
+            <div style="color:#8b949e;font-size:10px;margin-bottom:3px">Admin must enable</div>
+            <div style="font-size:10px;font-family:monospace;background:#0d1117;padding:4px 6px;border-radius:4px;color:#e3b341">rabbitmq-plugins<br>enable<br>rabbitmq_mqtt</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- connector -->
+<div class="connector">
+  <div class="arrow-down"><div class="arr-line"></div><div class="arr-head"></div></div>
+  <span>MQTT · port 8883 · TLS 1.3 · encrypted byte[]</span>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     ZONE 5 — SCADA SIDE
+═══════════════════════════════════════════════════════════════ -->
+<div class="zone zone-scada">
+  <div class="zone-label">ZONE 5 — SCADA API (SCADA team · no changes from our side)</div>
+  <div class="row" style="padding-top:22px; gap:12px">
+
+    <div class="box box-teal" style="flex:1.2">
+      <div class="box-title" style="color:#39d353">🔓 Decrypt — AES-256-GCM</div>
+      <div style="font-size:10px;color:#8b949e;margin-bottom:8px">SCADA team implements this (reference: DecryptExample.java)</div>
+      <div class="steps">
+        <div class="step"><span class="step-num teal">1</span> Read byte[] from MQTT topic <span class="pill pill-green">tms/scada/pas</span></div>
+        <div class="step"><span class="step-num teal">2</span> Load key: <span class="pill pill-red">ENV: SCADA_AES_KEY</span> &nbsp;(same key as Bridge server)</div>
+        <div class="step"><span class="step-num teal">3</span> Extract IV = bytes [0 .. 11] (12 bytes)</div>
+        <div class="step"><span class="step-num teal">4</span> Extract ciphertext = bytes [12 .. end]</div>
+        <div class="step"><span class="step-num teal">5</span> AES-256-GCM decrypt → verify GCM tag (tamper check)</div>
+        <div class="step"><span class="step-num teal">6</span> Parse JSON → update SCADA display</div>
+      </div>
+    </div>
+
+    <div class="divider divider-teal"></div>
+
+    <div class="box box-teal" style="flex:1.8">
+      <div class="box-title" style="color:#39d353">🖥️ TMS_PAS_UPDATE JSON (after decrypt)</div>
+      <div style="font-size:10px;color:#8b949e;margin-bottom:8px">ICD doc: PL-ICD-SCADA-JSON-001 Rev 0.1</div>
+      <div class="code-block" style="font-size:9.5px">
+{<br>
+&nbsp;&nbsp;<span class="c-key">"schemaVersion"</span>: <span class="c-str">"1.0"</span>,<br>
+&nbsp;&nbsp;<span class="c-key">"messageType"</span>: <span class="c-str">"TMS_PAS_UPDATE"</span>,<br>
+&nbsp;&nbsp;<span class="c-key">"timestamp"</span>: <span class="c-str">"2026-04-11T14:00:00.000Z"</span>,<br>
+&nbsp;&nbsp;<span class="c-key">"header"</span>: { <span class="c-key">"server"</span>: <span class="c-str">"RCS.E2K.PIS"</span>, <span class="c-key">"health"</span>: <span class="c-num">1</span>, <span class="c-key">"healthSeq"</span>: <span class="c-num">47</span> },<br>
+&nbsp;&nbsp;<span class="c-key">"platformPredictions"</span>: [{<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-key">"platformId"</span>: <span class="c-str">"PL2201"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-key">"predictedTrains"</span>: [{<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-key">"slot"</span>: <span class="c-num">1</span>, &nbsp;<span class="c-key">"trainId"</span>: <span class="c-str">"dc-occ.eclrt-train-6250-guid"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-key">"arrivalTime"</span>: <span class="c-num">3600</span>, &nbsp;<span class="c-key">"departureTime"</span>: <span class="c-str">"15:01:00"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-key">"status"</span>: <span class="c-num">0</span>, &nbsp;<span class="c-key">"destination"</span>: <span class="c-str">"PL101"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-key">"serviceState"</span>: <span class="c-num">1</span>, &nbsp;<span class="c-key">"runNumber"</span>: <span class="c-num">678</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;}]<br>
+&nbsp;&nbsp;}],<br>
+&nbsp;&nbsp;<span class="c-key">"blockOccupancies"</span>: [], &nbsp;<span class="c-key">"gateCommands"</span>: []<br>
+}
+      </div>
+    </div>
+
+    <div class="divider divider-teal"></div>
+
+    <div style="flex:0.8; display:flex; flex-direction:column; gap:8px">
+      <div class="box box-teal">
+        <div style="font-size:11px;font-weight:700;color:#39d353;margin-bottom:4px">status values</div>
+        <div style="font-size:10px"><span class="pill pill-green">0</span> predicted</div>
+        <div style="font-size:10px"><span class="pill pill-green">1</span> at platform</div>
+        <div style="font-size:10px"><span class="pill pill-green">2</span> departed</div>
+      </div>
+      <div class="box box-teal">
+        <div style="font-size:11px;font-weight:700;color:#39d353;margin-bottom:4px">serviceState</div>
+        <div style="font-size:10px"><span class="pill pill-green">1</span> will stop</div>
+        <div style="font-size:10px"><span class="pill pill-green">0</span> pass-through</div>
+      </div>
+      <div class="box box-teal">
+        <div style="font-size:11px;font-weight:700;color:#39d353;margin-bottom:4px">SCADA System</div>
+        <div style="font-size:10px">Updates platform displays</div>
+        <div style="font-size:10px">Train arrival/departure times</div>
+        <div style="font-size:10px">Destination boards</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ SECURITY SUMMARY ══ -->
+<div style="margin-top:16px; display:grid; grid-template-columns:repeat(4,1fr); gap:10px">
+
+  <div class="box box-gray">
+    <div style="font-size:11px;font-weight:700;color:#e3b341;margin-bottom:6px">🔑 Encryption</div>
+    <div style="font-size:10px">Algorithm: AES-256-GCM</div>
+    <div style="font-size:10px">Key: 256-bit from ENV</div>
+    <div style="font-size:10px">IV: 12B random per msg</div>
+    <div style="font-size:10px">GCM tag: 16B (tamper)</div>
+    <div style="font-size:10px">Key shared with SCADA team</div>
+  </div>
+
+  <div class="box box-gray">
+    <div style="font-size:11px;font-weight:700;color:#58a6ff;margin-bottom:6px">🔐 Authentication</div>
+    <div style="font-size:10px">Artemis: user/pass (ENV)</div>
+    <div style="font-size:10px">Kafka: SASL/PLAIN (ENV)</div>
+    <div style="font-size:10px">RabbitMQ: user/pass (ENV)</div>
+    <div style="font-size:10px;margin-top:4px;color:#8b949e">No passwords in config files</div>
+  </div>
+
+  <div class="box box-gray">
+    <div style="font-size:11px;font-weight:700;color:#f85149;margin-bottom:6px">🛡️ Error Handling</div>
+    <div style="font-size:10px">Retries: 3 attempts</div>
+    <div style="font-size:10px">Delay: 2 seconds</div>
+    <div style="font-size:10px">Dead letter: DLQ.kafka-bridge</div>
+    <div style="font-size:10px">XXE: Jackson safe by default</div>
+  </div>
+
+  <div class="box box-gray">
+    <div style="font-size:11px;font-weight:700;color:#3fb950;margin-bottom:6px">✅ GP Product Rule</div>
+    <div style="font-size:10px">PASInfoConverter: ZERO changes</div>
+    <div style="font-size:10px">Runs in parallel — separate service</div>
+    <div style="font-size:10px">Both get same Artemis XML copy</div>
+    <div style="font-size:10px;margin-top:4px;color:#3fb950">Bala approved · GD requirement met</div>
+  </div>
+
+</div>
+
+</body>
+</html>

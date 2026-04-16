@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PAS-SCADA Kafka Bridge — Live Dashboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0d1117; color: #e6edf3; }
+
+  /* ── Header ── */
+  .header {
+    background: linear-gradient(135deg, #161b22, #21262d);
+    border-bottom: 1px solid #30363d;
+    padding: 18px 32px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .header h1 { font-size: 20px; color: #58a6ff; }
+  .header p  { font-size: 13px; color: #8b949e; margin-top: 2px; }
+  .status-badge {
+    padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600;
+    background: #21262d; border: 1px solid #30363d; color: #8b949e;
+  }
+  .status-badge.running { background: #0d4429; border-color: #238636; color: #3fb950; }
+  .status-badge.stopped { background: #3d0a0a; border-color: #6e1a1a; color: #f85149; }
+
+  /* ── Controls ── */
+  .controls {
+    padding: 20px 32px;
+    display: flex; gap: 12px; align-items: center;
+    background: #161b22; border-bottom: 1px solid #30363d;
+  }
+  .btn {
+    padding: 10px 24px; border-radius: 8px; border: none;
+    font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+  }
+  .btn-start  { background: #238636; color: #fff; }
+  .btn-start:hover  { background: #2ea043; }
+  .btn-stop   { background: #6e1a1a; color: #fff; }
+  .btn-stop:hover   { background: #da3633; }
+  .btn-send   { background: #1f6feb; color: #fff; }
+  .btn-send:hover   { background: #388bfd; }
+  .btn-clear  { background: #21262d; color: #8b949e; border: 1px solid #30363d; }
+  .btn-clear:hover  { background: #30363d; color: #e6edf3; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-label { color: #8b949e; font-size: 13px; margin-left: 12px; }
+  .speed-select {
+    background: #21262d; border: 1px solid #30363d; color: #e6edf3;
+    padding: 8px 12px; border-radius: 6px; font-size: 13px; cursor: pointer;
+  }
+
+  /* ── Pipeline diagram ── */
+  .pipeline {
+    padding: 24px 32px 8px;
+    display: flex; align-items: center; gap: 0; overflow-x: auto;
+  }
+  .node {
+    display: flex; flex-direction: column; align-items: center;
+    min-width: 120px;
+  }
+  .node-box {
+    width: 108px; padding: 12px 8px; border-radius: 10px; text-align: center;
+    border: 2px solid #30363d; background: #161b22;
+    transition: all 0.4s;
+  }
+  .node-box.active { border-color: #3fb950; background: #0d2d0f; box-shadow: 0 0 16px #3fb95055; }
+  .node-box.sending { border-color: #58a6ff; background: #0c1d3a; box-shadow: 0 0 16px #58a6ff44; }
+  .node-icon { font-size: 26px; margin-bottom: 4px; }
+  .node-name { font-size: 12px; font-weight: 600; color: #e6edf3; }
+  .node-sub  { font-size: 10px; color: #8b949e; margin-top: 2px; }
+  .node-count {
+    margin-top: 6px; font-size: 11px; font-weight: 700;
+    color: #3fb950; background: #0d2d0f; padding: 2px 8px;
+    border-radius: 10px; border: 1px solid #238636;
+    min-width: 50px; text-align: center;
+  }
+  .arrow {
+    flex: 1; min-width: 40px; display: flex; flex-direction: column;
+    align-items: center; position: relative; margin-top: -30px;
+  }
+  .arrow-line {
+    height: 2px; width: 100%; background: #30363d; position: relative;
+    overflow: hidden;
+  }
+  .arrow-line.active { background: #238636; }
+  .arrow-packet {
+    position: absolute; top: -4px; left: -10px;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #3fb950; display: none;
+    animation: travel 1.2s linear infinite;
+  }
+  .arrow-line.active .arrow-packet { display: block; }
+  @keyframes travel { from { left: -10px; } to { left: 100%; } }
+  .arrow-label { font-size: 9px; color: #8b949e; margin-top: 4px; text-align: center; }
+  .arrow-head {
+    width: 0; height: 0;
+    border-top: 6px solid transparent; border-bottom: 6px solid transparent;
+    border-left: 10px solid #30363d; margin-top: -8px;
+    transition: border-left-color 0.4s;
+  }
+  .arrow.active .arrow-head { border-left-color: #238636; }
+  .arrow.active .arrow-line { background: #238636; }
+
+  /* ── Message log ── */
+  .log-section { padding: 16px 32px; }
+  .log-header  {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 10px;
+  }
+  .log-title { font-size: 14px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; }
+  .log-box {
+    background: #0d1117; border: 1px solid #30363d; border-radius: 8px;
+    height: 220px; overflow-y: auto; padding: 12px;
+    font-family: 'Consolas', 'Courier New', monospace; font-size: 12px;
+  }
+  .log-line { padding: 2px 0; border-bottom: 1px solid #21262d; display: flex; gap: 8px; }
+  .log-time  { color: #8b949e; min-width: 86px; }
+  .log-tag   { min-width: 80px; font-weight: 600; border-radius: 4px; padding: 0 6px; font-size: 11px; }
+  .log-tag.tms     { background: #1c2d3a; color: #58a6ff; }
+  .log-tag.bridge  { background: #1a2b1a; color: #3fb950; }
+  .log-tag.kafka   { background: #2d1f10; color: #d29922; }
+  .log-tag.rabbit  { background: #2d1028; color: #bc8cff; }
+  .log-tag.scada   { background: #1a2b3a; color: #39d353; }
+  .log-tag.error   { background: #3d0a0a; color: #f85149; }
+  .log-tag.security{ background: #2d2010; color: #e3b341; }
+  .log-msg   { color: #e6edf3; flex: 1; }
+
+  /* ── Stats grid ── */
+  .stats {
+    display: grid; grid-template-columns: repeat(6, 1fr);
+    gap: 12px; padding: 16px 32px;
+  }
+  .stat-card {
+    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    padding: 14px; text-align: center;
+  }
+  .stat-num  { font-size: 28px; font-weight: 700; color: #58a6ff; }
+  .stat-label { font-size: 11px; color: #8b949e; margin-top: 4px; }
+
+  /* ── Message detail panel ── */
+  .detail-section {
+    padding: 0 32px 24px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  .detail-box {
+    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    overflow: hidden;
+  }
+  .detail-box-title {
+    background: #21262d; padding: 8px 14px; font-size: 12px;
+    font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: 1px;
+  }
+  .detail-body {
+    padding: 12px; font-family: 'Consolas', monospace; font-size: 11px;
+    color: #e6edf3; height: 160px; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .json-key    { color: #79c0ff; }
+  .json-str    { color: #a5d6ff; }
+  .json-num    { color: #3fb950; }
+  .json-bool   { color: #d29922; }
+
+  /* ── Component Detail Rows ── */
+  .comp-details { padding: 8px 32px 4px; display: flex; flex-direction: column; gap: 10px; }
+  .comp-row {
+    border: 1px solid #30363d; border-radius: 10px; overflow: hidden;
+    transition: border-color 0.4s;
+  }
+  .comp-row.active-row { border-color: #388bfd; }
+  .comp-row-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 16px; font-size: 13px; font-weight: 700;
+  }
+  .camel-color  { background: #0d1f0d; border-bottom: 1px solid #238636; }
+  .kafka-color  { background: #1f1400; border-bottom: 1px solid #d29922; }
+  .rabbit-color { background: #1a0d2e; border-bottom: 1px solid #8957e5; }
+  .comp-icon  { font-size: 18px; }
+  .comp-title { flex: 1; }
+  .comp-live  {
+    font-size: 11px; padding: 3px 12px; border-radius: 12px;
+    background: #21262d; color: #8b949e; border: 1px solid #30363d;
+    transition: all 0.3s;
+  }
+  .comp-live.live { background: #0d2d0f; color: #3fb950; border-color: #238636; }
+  .comp-row-body {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
+    background: #0d1117;
+  }
+  .comp-col {
+    padding: 12px 14px; border-right: 1px solid #21262d; font-size: 12px;
+  }
+  .comp-col:last-child { border-right: none; }
+  .comp-label { color: #8b949e; font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.8px; margin-bottom: 6px; margin-top: 4px; }
+  .comp-val   { color: #e6edf3; margin-bottom: 3px; }
+  .highlight-val { font-size: 22px; font-weight: 700; color: #58a6ff; margin-top: 2px; }
+  .topic-pill {
+    display: inline-block; background: #1c2d3a; color: #58a6ff;
+    border: 1px solid #1f6feb44; border-radius: 4px;
+    padding: 1px 7px; font-size: 11px; margin-bottom: 3px; font-family: monospace;
+  }
+  .five-col { grid-template-columns: repeat(5, 1fr) !important; }
+  .real-val  { color: #e6edf3; font-size: 12px; margin-bottom: 4px; font-family: 'Consolas', monospace; }
+  .real-val.small { font-size: 11px; }
+  .accent-blue   { color: #58a6ff !important; }
+  .accent-green  { color: #3fb950 !important; }
+  .accent-yellow { color: #e3b341 !important; }
+  .big-num { font-size: 26px; font-weight: 700; color: #58a6ff; }
+  .mt8 { margin-top: 8px !important; }
+  .comp-badge {
+    font-size: 11px; padding: 3px 12px; border-radius: 12px;
+    background: #21262d; color: #8b949e; border: 1px solid #30363d;
+    font-weight: 700; transition: all 0.3s;
+  }
+  .comp-badge.live { background: #0d2d0f; color: #3fb950; border-color: #238636; }
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<div class="header">
+  <div>
+    <h1>PAS-SCADA Kafka Bridge — Live Dashboard</h1>
+    <p>Pink Line TMS Integration &nbsp;|&nbsp; Real-time message flow simulation</p>
+  </div>
+  <div id="statusBadge" class="status-badge stopped">STOPPED</div>
+</div>
+
+<!-- ── Controls ── -->
+<div class="controls">
+  <button class="btn btn-start" id="btnStart" onclick="startBridge()">Start Bridge</button>
+  <button class="btn btn-stop"  id="btnStop"  onclick="stopBridge()" disabled>Stop Bridge</button>
+  <button class="btn btn-send"  id="btnSend"  onclick="sendOnce()"   disabled>Send One Message</button>
+  <button class="btn btn-clear" onclick="clearLog()">Clear Log</button>
+  <span class="speed-label">Auto-send interval:</span>
+  <select class="speed-select" id="speedSelect">
+    <option value="3000">3 seconds</option>
+    <option value="5000" selected>5 seconds</option>
+    <option value="10000">10 seconds</option>
+    <option value="0">Manual only</option>
+  </select>
+</div>
+
+<!-- ── Pipeline ── -->
+<div class="pipeline">
+
+  <!-- TMS Server -->
+  <div class="node">
+    <div class="node-box" id="node-tms">
+      <div class="node-icon">🚆</div>
+      <div class="node-name">TMS Server</div>
+      <div class="node-sub">10.12.1.13</div>
+    </div>
+    <div class="node-count" id="cnt-tms">0 sent</div>
+  </div>
+
+  <!-- TMS → Artemis -->
+  <div class="arrow" id="arrow-1">
+    <div class="arrow-line"><div class="arrow-packet"></div></div>
+    <div class="arrow-head"></div>
+    <div class="arrow-label">XML publish</div>
+  </div>
+
+  <!-- Artemis -->
+  <div class="node">
+    <div class="node-box" id="node-artemis">
+      <div class="node-icon">📨</div>
+      <div class="node-name">Artemis</div>
+      <div class="node-sub">JMS Topics</div>
+    </div>
+    <div class="node-count" id="cnt-artemis">0 msgs</div>
+  </div>
+
+  <!-- Artemis → Bridge -->
+  <div class="arrow" id="arrow-2">
+    <div class="arrow-line"><div class="arrow-packet"></div></div>
+    <div class="arrow-head"></div>
+    <div class="arrow-label">subscribe</div>
+  </div>
+
+  <!-- Bridge -->
+  <div class="node">
+    <div class="node-box" id="node-bridge">
+      <div class="node-icon">⚙️</div>
+      <div class="node-name">Bridge App</div>
+      <div class="node-sub">XML→JSON+Encrypt</div>
+    </div>
+    <div class="node-count" id="cnt-bridge">0 proc</div>
+  </div>
+
+  <!-- Bridge → Kafka -->
+  <div class="arrow" id="arrow-3">
+    <div class="arrow-line"><div class="arrow-packet"></div></div>
+    <div class="arrow-head"></div>
+    <div class="arrow-label">encrypted byte[]</div>
+  </div>
+
+  <!-- Kafka -->
+  <div class="node">
+    <div class="node-box" id="node-kafka">
+      <div class="node-icon">🗄️</div>
+      <div class="node-name">Kafka</div>
+      <div class="node-sub">tms.scada.encrypted</div>
+    </div>
+    <div class="node-count" id="cnt-kafka">0 msgs</div>
+  </div>
+
+  <!-- Kafka → RabbitMQ -->
+  <div class="arrow" id="arrow-4">
+    <div class="arrow-line"><div class="arrow-packet"></div></div>
+    <div class="arrow-head"></div>
+    <div class="arrow-label">consume</div>
+  </div>
+
+  <!-- RabbitMQ -->
+  <div class="node">
+    <div class="node-box" id="node-rabbit">
+      <div class="node-icon">🐇</div>
+      <div class="node-name">RabbitMQ</div>
+      <div class="node-sub">amq.topic/MQTT</div>
+    </div>
+    <div class="node-count" id="cnt-rabbit">0 msgs</div>
+  </div>
+
+  <!-- RabbitMQ → SCADA -->
+  <div class="arrow" id="arrow-5">
+    <div class="arrow-line"><div class="arrow-packet"></div></div>
+    <div class="arrow-head"></div>
+    <div class="arrow-label">MQTT 8883</div>
+  </div>
+
+  <!-- SCADA -->
+  <div class="node">
+    <div class="node-box" id="node-scada">
+      <div class="node-icon">🖥️</div>
+      <div class="node-name">SCADA API</div>
+      <div class="node-sub">Decrypt + Display</div>
+    </div>
+    <div class="node-count" id="cnt-scada">0 recv</div>
+  </div>
+
+</div>
+
+<!-- ── Component Detail Rows ── -->
+<div class="comp-details">
+
+  <!-- ══ CAMEL ROW ══ -->
+  <div class="comp-row" id="camel-row">
+    <div class="comp-row-header camel-color">
+      <span class="comp-icon">⚙️</span>
+      <span class="comp-title">Apache Camel — Bridge App (XML → JSON → Encrypt → Kafka)</span>
+      <span class="comp-badge" id="camel-live">IDLE</span>
+    </div>
+    <div class="comp-row-body five-col">
+
+      <div class="comp-col">
+        <div class="comp-label">Artemis Topic Received</div>
+        <div class="real-val" id="r-camel-topic">—</div>
+        <div class="comp-label mt8">Message Type</div>
+        <div class="real-val accent-blue" id="r-camel-type">—</div>
+        <div class="comp-label mt8">Schema (rcsschema header)</div>
+        <div class="real-val small" id="r-camel-schema">—</div>
+      </div>
+
+      <div class="comp-col">
+        <div class="comp-label">Route ID Fired</div>
+        <div class="real-val small" id="r-camel-route">—</div>
+        <div class="comp-label mt8">XML Size (bytes)</div>
+        <div class="real-val accent-green" id="r-camel-xmlsize">—</div>
+        <div class="comp-label mt8">XML Root Element</div>
+        <div class="real-val" id="r-camel-xmlroot">—</div>
+      </div>
+
+      <div class="comp-col">
+        <div class="comp-label">XmlToJsonProcessor Output</div>
+        <div class="real-val small" id="r-camel-platform">—</div>
+        <div class="real-val small" id="r-camel-trainid">—</div>
+        <div class="real-val small" id="r-camel-arrival">—</div>
+        <div class="real-val small" id="r-camel-runno">—</div>
+        <div class="comp-label mt8">JSON Size (bytes)</div>
+        <div class="real-val accent-green" id="r-camel-jsonsize">—</div>
+      </div>
+
+      <div class="comp-col">
+        <div class="comp-label">EncryptProcessor Output</div>
+        <div class="real-val small" id="r-camel-iv">—</div>
+        <div class="real-val small" id="r-camel-cipher">—</div>
+        <div class="real-val small" id="r-camel-tag">—</div>
+        <div class="comp-label mt8">Encrypted Size (bytes)</div>
+        <div class="real-val accent-yellow" id="r-camel-encsize">—</div>
+      </div>
+
+      <div class="comp-col">
+        <div class="comp-label">Total Processed</div>
+        <div class="big-num" id="r-camel-total">0</div>
+        <div class="comp-label mt8">Failed (DLQ)</div>
+        <div class="big-num" id="r-camel-failed" style="color:#f85149">0</div>
+        <div class="comp-label mt8">Last at</div>
+        <div class="real-val small" id="r-camel-time">—</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══ KAFKA ROW ══ -->
+  <div class="comp-row" id="kafka-row">
+    <div class="comp-row-header kafka-color">
+      <span class="comp-icon">🗄️</span>
+      <span class="comp-title">Apache Kafka — Encrypted Message Store &amp; Relay</span>
+      <span class="comp-badge" id="kafka-live">IDLE</span>
+    </div>
+    <div class="comp-row-body five-col">
+
+      <div class="comp-col">
+        <div class="comp-label">Topic</div>
+        <div class="real-val accent-blue">tms.scada.encrypted</div>
+        <div class="comp-label mt8">Broker</div>
+        <div class="real-val small">local: localhost:9092</div>
+        <div class="real-val small">prod: ${KAFKA_HOST}:${KAFKA_PORT}</div>
+        <div class="comp-label mt8">Auth</div>
+        <div class="real-val small">local: PLAINTEXT (no auth)</div>
+        <div class="real-val small">prod: SASL_SSL · user: ${KAFKA_USER}</div>
+      </div>
+
+      <div class="comp-col">
+        <div class="comp-label">PRODUCER — Bridge publishes</div>
+        <div class="real-val small">Serializer: ByteArraySerializer</div>
+        <div class="real-val small">Key: null (no key)</div>
+        <div class="comp-label mt8">Last Published Offset</div>
+        <div class="real-val accent-yellow" id="r-kafka-pub-offset">—</div>
+        <div class="comp-label mt8">Published Count</div>
+        <div class="big-num" id="r-kafka-pub-count">0</div>
+      </div>
+
+      <div class="comp-col">
+        <div class="comp-label">Last Message on Topic</div>
+        <div class="real-val small">Partition: <span id="r-kafka-partition">0</span></div>
+        <div class="real-val small">Offset: <span id="r-kafka-offset">—</span></div>
+        <div class="real-val small">Timestamp: <span id="r-kafka-ts">—</span></div>
+        <div class="comp-label mt8">Payload Breakdown</div>
+        <div class="real-val small">IV: 12 bytes</div>
+        <div class="real-val small">Cipher: <span id="r-kafka-cipherlen">—</span> bytes</div>
+        <div class="real-val small">GCM tag: 16 bytes</div>
+        <div class="real-val small accent-yellow">Total: <span id="r-kafka-total-size">—</span> bytes</div>
+      </div>
+
+      <div class="comp-col">
+        <div class="comp-label">CONSUMER — Bridge reads → RabbitMQ</div>
+        <div class="real-val small">Group: pas-bridge-consumer</div>
+        <div class="real-val small">Deserializer: ByteArrayDeserializer</div>
+        <div class="real-val small">Auto offset reset: latest</div>
+        <div class="comp-label mt8">Consumed Offset</div>
+        <div class="real-val accent-yellow" id="r-kafka-con-offset">—</div>
+        <div class="comp-label mt8">Consumed Count</div>
+        <div class="big-num" id="r-kafka-con-count">0</div>
+      </div>
+
+      <div class="comp-col">
+        <div class="comp-label">Retention &amp; Config</div>
+        <div class="real-val small">Retention: 24 hours</div>
+        <div class="real-val small">Partitions: 1</div>
+        <div class="real-val small">Replication: 1 (local)</div>
+        <div class="comp-label mt8">Consumer Lag</div>
+        <div class="real-val accent-green" id="r-kafka-lag">0</div>
+        <div class="comp-label mt8">Total Through Kafka</div>
+        <div class="big-num" id="r-kafka-total">0</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══ RABBITMQ ROW ══ -->
+  <div class="comp-row" id="rabbit-row">
+    <div class="comp-row-header rabbit-color">
+      <span class="comp-icon">🐇</span>
+      <span class="comp-title">RabbitMQ — AMQP Exchange → MQTT Plugin → SCADA API</span>
+      <span class="comp-badge" id="rabbit-live">IDLE</span>
+    </div>
+    <div class="comp-row-body five-col">
+
+      <div class="comp-col">
+        <div class="comp-label">AMQP Connection</div>
+        <div class="real-val small">local: localhost:5672 · user: thiru</div>
+        <div class="real-val small">prod: ${RABBITMQ_HOST}:${RABBITMQ_PORT} · user: ${RABBITMQ_USER}</div>
+        <div class="comp-label mt8">Exchange</div>
+        <div class="real-val accent-blue">amq.topic</div>
+        <div class="comp-label mt8">Exchange Type</div>
+        <div class="real-val small">topic (pattern matching)</div>
+      </div>
+
+      <div class="comp-col">
+        <div class="comp-label">Message Published</div>
+        <div class="real-val small">Routing key: <span class="accent-blue">tms.scada.pas</span></div>
+        <div class="real-val small">Delivery mode: 2 (persistent)</div>
+        <div class="real-val small">Content-Type: application/octet-stream</div>
+        <div class="comp-label mt8">Msg Timestamp</div>
+        <div class="real-val small" id="r-rabbit-ts">—</div>
+        <div class="comp-label mt8">Published Count</div>
+        <div class="big-num" id="r-rabbit-pub">0</div>
+      </div>
+
+      <div class="comp-col">
+        <div class="comp-label">MQTT Plugin Converts</div>
+        <div class="real-val small">AMQP routing key <span class="accent-blue">tms.scada.pas</span></div>
+        <div class="real-val small">→ MQTT topic <span class="accent-blue">tms/scada/pas</span></div>
+        <div class="real-val small">Port: 8883 (MQTT over TLS)</div>
+        <div class="real-val small">QoS: 1 (at least once)</div>
+        <div class="comp-label mt8">MQTT Delivered</div>
+        <div class="big-num" id="r-rabbit-mqtt">0</div>
+      </div>
+
+      <div class="comp-col">
+        <div class="comp-label">SCADA Receives &amp; Decrypts</div>
+        <div class="real-val small">1. Read byte[] from MQTT</div>
+        <div class="real-val small">2. Extract IV → bytes [0..11]</div>
+        <div class="real-val small">3. AES-256-GCM decrypt</div>
+        <div class="real-val small">4. Verify GCM tag (16 bytes)</div>
+        <div class="real-val small">5. Parse JSON → update display</div>
+        <div class="comp-label mt8">SCADA Received Count</div>
+        <div class="big-num" id="r-rabbit-scada">0</div>
+      </div>
+
+      <div class="comp-col">
+        <div class="comp-label">Last Payload to SCADA</div>
+        <div class="real-val small">messageType: <span id="r-rabbit-msgtype" class="accent-green">—</span></div>
+        <div class="real-val small">platformId: <span id="r-rabbit-platform" class="accent-green">—</span></div>
+        <div class="real-val small">trainId: <span id="r-rabbit-trainid" class="accent-green">—</span></div>
+        <div class="real-val small">status: <span id="r-rabbit-status" class="accent-green">—</span></div>
+        <div class="real-val small">runNumber: <span id="r-rabbit-run" class="accent-green">—</span></div>
+        <div class="real-val small">arrivalTime: <span id="r-rabbit-arr" class="accent-green">—</span></div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Stats ── -->
+<div class="stats">
+  <div class="stat-card">
+    <div class="stat-num" id="stat-total">0</div>
+    <div class="stat-label">Total Messages</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num" id="stat-timetable" style="color:#58a6ff">0</div>
+    <div class="stat-label">ATRTimeTable</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num" id="stat-arrival" style="color:#3fb950">0</div>
+    <div class="stat-label">SingleArrival</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num" id="stat-departure" style="color:#d29922">0</div>
+    <div class="stat-label">SingleDeparture</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num" id="stat-route" style="color:#bc8cff">0</div>
+    <div class="stat-label">RouteInfo</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num" id="stat-encrypted" style="color:#e3b341">0</div>
+    <div class="stat-label">Encrypted OK</div>
+  </div>
+</div>
+
+<!-- ── Log ── -->
+<div class="log-section">
+  <div class="log-header">
+    <div class="log-title">Live Message Log</div>
+  </div>
+  <div class="log-box" id="logBox">
+    <div class="log-line">
+      <span class="log-time">--:--:--</span>
+      <span class="log-tag bridge">BRIDGE</span>
+      <span class="log-msg">Click "Start Bridge" to begin simulation...</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── Detail panels ── -->
+<div class="detail-section">
+  <div class="detail-box">
+    <div class="detail-box-title">Last XML Received (from TMS / Artemis)</div>
+    <div class="detail-body" id="xmlPanel">— waiting —</div>
+  </div>
+  <div class="detail-box">
+    <div class="detail-box-title">Last JSON Sent to Kafka (decrypted view)</div>
+    <div class="detail-body" id="jsonPanel">— waiting —</div>
+  </div>
+</div>
+
+<script>
+// ── State ──
+let running = false;
+let autoTimer = null;
+let counts = { tms:0, artemis:0, bridge:0, kafka:0, rabbit:0, scada:0 };
+let stats  = { total:0, timetable:0, arrival:0, departure:0, route:0, encrypted:0 };
+let msgQueue = []; // round-robin through message types
+
+// ── Message types ──
+const MSG_TYPES = ['ATRTimeTable','SingleArrival','SingleDeparture','RouteInfo'];
+let msgIdx = 0;
+
+// ── XML samples ──
+const SAMPLES = {
+  ATRTimeTable: {
+    schema: 'RCS.E2K.TMS.ATRTimeTableMsg.V3',
+    topic:  'TMS.PISInfo',
+    xml: `<ATRTimeTable>
+  <dateTime>20260411T140000</dateTime>
+  <StartIndex>0</StartIndex>
+  <TotalCount>1</TotalCount>
+  <Trains>
+    <Tg>
+      <TTGUID>dc-occ.eclrt-train-6250-guid</TTGUID>
+      <Name>PinkLine-A</Name>
+      <TripNo>678</TripNo>
+      <CTD lpid="101" tn="678"/>
+      <Evts F="3" Id="2201" As="3600" Ds="3660"/>
+    </Tg>
+  </Trains>
+</ATRTimeTable>`,
+    jsonFn: () => ({
+      schemaVersion: "1.0",
+      messageType: "TMS_PAS_UPDATE",
+      timestamp: new Date().toISOString(),
+      header: { server:"RCS.E2K.PIS", version:"1.0", health:1, healthSeq: Math.floor(Math.random()*256) },
+      trains: [],
+      platformPredictions: [{
+        platformId: "PL2201",
+        predictedTrains: [{
+          slot: 1, trainId: "dc-occ.eclrt-train-6250-guid",
+          arrivalTime: 3600, departureTime: "14:01:00",
+          status: 0, destination: "PL101", serviceState: 1, runNumber: 678
+        }]
+      }],
+      blockOccupancies: [], gateCommands: []
+    })
+  },
+  SingleArrival: {
+    schema: 'RCS.E2K.TMS.TrafficReportClient.SingleArrival.V2',
+    topic:  'RCS.E2K.TMS.TrafficReportClient',
+    xml: `<SingleArrival>
+  <Arr>
+    <train>
+      <TTGUID>dc-occ.eclrt-train-6250-guid</TTGUID>
+    </train>
+    <loc><tmsid>2201</tmsid></loc>
+    <atimes>
+      <oTime>20260411T143000</oTime>
+    </atimes>
+  </Arr>
+</SingleArrival>`,
+    jsonFn: () => ({
+      schemaVersion: "1.0",
+      messageType: "TMS_PAS_UPDATE",
+      timestamp: new Date().toISOString(),
+      header: { server:"RCS.E2K.PIS", version:"1.0", health:1, healthSeq: Math.floor(Math.random()*256) },
+      trains: [],
+      platformPredictions: [{
+        platformId: "PL2201",
+        predictedTrains: [{
+          slot: 1, trainId: "dc-occ.eclrt-train-6250-guid",
+          arrivalTime: 0, departureTime: "",
+          status: 1, destination: "", serviceState: 1, runNumber: 0
+        }]
+      }],
+      blockOccupancies: [], gateCommands: []
+    })
+  },
+  SingleDeparture: {
+    schema: 'RCS.E2K.TMS.TrafficReportClient.SingleDeparture.V2',
+    topic:  'RCS.E2K.TMS.TrafficReportClient',
+    xml: `<SingleDeparture>
+  <Dep>
+    <train>
+      <TTGUID>dc-occ.eclrt-train-6250-guid</TTGUID>
+    </train>
+    <loc><tmsid>2201</tmsid></loc>
+    <dtimes>
+      <oTime>20260411T143300</oTime>
+    </dtimes>
+  </Dep>
+</SingleDeparture>`,
+    jsonFn: () => ({
+      schemaVersion: "1.0",
+      messageType: "TMS_PAS_UPDATE",
+      timestamp: new Date().toISOString(),
+      header: { server:"RCS.E2K.PIS", version:"1.0", health:1, healthSeq: Math.floor(Math.random()*256) },
+      trains: [],
+      platformPredictions: [{
+        platformId: "PL2201",
+        predictedTrains: [{
+          slot: 1, trainId: "dc-occ.eclrt-train-6250-guid",
+          arrivalTime: 0, departureTime: "14:33:00",
+          status: 2, destination: "", serviceState: 1, runNumber: 0
+        }]
+      }],
+      blockOccupancies: [], gateCommands: []
+    })
+  },
+  RouteInfo: {
+    schema: 'RCS.E2K.TMS.RouteInfo.V2',
+    topic:  'RCS.E2K.TMS.RouteInfo',
+    xml: `<routeinfo>
+  <TTGUID>dc-occ.eclrt-train-6250-guid</TTGUID>
+  <dests>
+    <dest tmsid="2201"/>
+    <dest tmsid="2202"/>
+    <dest tmsid="2203"/>
+  </dests>
+</routeinfo>`,
+    jsonFn: () => ({
+      schemaVersion: "1.0",
+      messageType: "TMS_PAS_UPDATE",
+      timestamp: new Date().toISOString(),
+      header: { server:"RCS.E2K.PIS", version:"1.0", health:1, healthSeq: Math.floor(Math.random()*256) },
+      trains: [], platformPredictions: [], blockOccupancies: [], gateCommands: [],
+      routeInfo: {
+        trainId: "6250",
+        trainGUID: "dc-occ.eclrt-train-6250-guid",
+        route: ["PL2201","PL2202","PL2203"]
+      }
+    })
+  }
+};
+
+// ── Controls ──
+function startBridge() {
+  running = true;
+  document.getElementById('btnStart').disabled = true;
+  document.getElementById('btnStop').disabled  = false;
+  document.getElementById('btnSend').disabled  = false;
+  document.getElementById('statusBadge').className = 'status-badge running';
+  document.getElementById('statusBadge').textContent = 'RUNNING';
+
+  // Activate all nodes
+  ['node-tms','node-artemis','node-bridge','node-kafka','node-rabbit','node-scada']
+    .forEach(id => document.getElementById(id).classList.add('active'));
+
+  addLog('bridge', 'Bridge started — Camel routes connected to Artemis, Kafka, RabbitMQ');
+  addLog('security', 'AES-256-GCM key loaded from ENV: SCADA_AES_KEY');
+  addLog('bridge', 'Subscribing to 4 Artemis topics...');
+  addLog('bridge', 'Durable subscriber: kafka-bridge-tms-pisinfo on TMS.PISInfo');
+  addLog('bridge', 'Durable subscriber: kafka-bridge-rcs-e2k on RCS.E2K.TMS.TrafficReportClient');
+  addLog('bridge', 'Durable subscriber on: TSInfo, RCS.E2K.TMS.RouteInfo');
+  addLog('bridge', 'Kafka consumer ready — topic: tms.scada.encrypted');
+
+  const interval = parseInt(document.getElementById('speedSelect').value);
+  if (interval > 0) {
+    autoTimer = setInterval(sendOnce, interval);
+  }
+  // Send first immediately
+  setTimeout(sendOnce, 800);
+}
+
+function stopBridge() {
+  running = false;
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+  document.getElementById('btnStart').disabled = false;
+  document.getElementById('btnStop').disabled  = true;
+  document.getElementById('btnSend').disabled  = true;
+  document.getElementById('statusBadge').className = 'status-badge stopped';
+  document.getElementById('statusBadge').textContent = 'STOPPED';
+
+  ['node-tms','node-artemis','node-bridge','node-kafka','node-rabbit','node-scada']
+    .forEach(id => document.getElementById(id).classList.remove('active','sending'));
+  for (let i=1;i<=5;i++) deactivateArrow(i);
+  addLog('bridge','Bridge stopped — all routes closed');
+}
+
+function clearLog() {
+  document.getElementById('logBox').innerHTML = '';
+}
+
+// ── Simulate one message flowing through pipeline ──
+function sendOnce() {
+  if (!running) return;
+
+  const type = MSG_TYPES[msgIdx % MSG_TYPES.length];
+  msgIdx++;
+  const sample = SAMPLES[type];
+
+  // Update stats
+  stats.total++;
+  if (type==='ATRTimeTable')   stats.timetable++;
+  if (type==='SingleArrival')  stats.arrival++;
+  if (type==='SingleDeparture')stats.departure++;
+  if (type==='RouteInfo')      stats.route++;
+
+  // Show XML
+  document.getElementById('xmlPanel').textContent =
+    `Topic: ${sample.topic}\nSchema: ${sample.schema}\n\n${sample.xml}`;
+
+  // Simulate pipeline stages with delays
+  step1_tms(type, sample);
+}
+
+function step1_tms(type, sample) {
+  counts.tms++;
+  pulse('node-tms');
+  addLog('tms', `TMS publishes ${type} → Artemis topic: ${sample.topic} | schema: ${sample.schema}`);
+  document.getElementById('xmlPanel').textContent =
+    `Topic: ${sample.topic}\nSchema: ${sample.schema}\n\n${sample.xml.trim()}`;
+  updateCount('cnt-tms', counts.tms, 'sent');
+  activateArrow(1);
+  setTimeout(() => step2_artemis(type, sample), 600);
+}
+
+function step2_artemis(type, sample) {
+  counts.artemis++;
+  pulse('node-artemis');
+  addLog('tms', `Artemis delivers XML to Bridge subscriber | topic: ${sample.topic} | size: ${sample.xml.trim().length}B`);
+  updateCount('cnt-artemis', counts.artemis, 'msgs');
+  activateArrow(2);
+  setTimeout(() => step3_bridge(type, sample), 700);
+}
+
+function step3_bridge(type, sample) {
+  counts.bridge++;
+  pulse('node-bridge');
+  const json    = sample.jsonFn();
+  const jsonStr = JSON.stringify(json, null, 2);
+  const xmlSize = sample.xml.trim().length;
+  const jsonSize= jsonStr.length;
+  const encSize = 12 + jsonSize + 16; // IV + cipher + GCM tag approx
+  const routeId = 'route-' + sample.topic.replace(/\./g,'-').toLowerCase() + '-to-kafka';
+  const xmlRoot = '<' + type.toLowerCase() + '> / </' + type.toLowerCase() + '>';
+  const now     = new Date().toLocaleTimeString();
+
+  // Extract real JSON values for display
+  const pp = json.platformPredictions && json.platformPredictions[0];
+  const pt = pp && pp.predictedTrains && pp.predictedTrains[0];
+  const ri = json.routeInfo;
+
+  const platformId  = pp  ? pp.platformId                  : (ri ? 'routeInfo' : '—');
+  const trainId     = pt  ? pt.trainId.slice(0,28)+'…'    : (ri ? ri.trainGUID.slice(0,28)+'…' : '—');
+  const arrivalTime = pt  ? 'arrivalTime: '+pt.arrivalTime+'s' : (ri ? 'route: '+ri.route.join(' → ') : '—');
+  const runNumber   = pt  ? 'runNumber: '+pt.runNumber    : '—';
+
+  addLog('bridge', `Camel route fired: ${routeId}`);
+  addLog('bridge', `XmlToJsonProcessor: ${type} (${xmlSize}B XML) → ICD JSON (${jsonSize}B)`);
+  addLog('bridge', `EncryptProcessor: AES-256-GCM → IV(12B) + cipher(${jsonSize}B) + tag(16B) = ${encSize}B`);
+  stats.encrypted++;
+
+  // ── Camel row real values ──
+  setBadgeLive('camel-live', true);
+  set('r-camel-topic',   sample.topic);
+  set('r-camel-type',    type);
+  set('r-camel-schema',  sample.schema);
+  set('r-camel-route',   routeId);
+  set('r-camel-xmlsize', xmlSize + ' bytes');
+  set('r-camel-xmlroot', '&lt;' + type + '&gt; … &lt;/' + type + '&gt;');
+  set('r-camel-platform','platformId: ' + platformId);
+  set('r-camel-trainid', 'trainId: ' + trainId);
+  set('r-camel-arrival', arrivalTime);
+  set('r-camel-runno',   runNumber);
+  set('r-camel-jsonsize',jsonSize + ' bytes');
+  set('r-camel-iv',      'IV (random 12B): ' + fakeHex(12));
+  set('r-camel-cipher',  'Cipher (' + jsonSize + 'B): ' + fakeHex(6) + '…');
+  set('r-camel-tag',     'GCM tag (16B): ' + fakeHex(16));
+  set('r-camel-encsize', encSize + ' bytes');
+  set('r-camel-total',   counts.bridge);
+  set('r-camel-time',    now);
+  flash('camel-row');
+  setTimeout(() => setBadgeLive('camel-live', false), 2000);
+
+  document.getElementById('jsonPanel').innerHTML = syntaxHighlight(jsonStr);
+  updateCount('cnt-bridge', counts.bridge, 'proc');
+  activateArrow(3);
+  setTimeout(() => step4_kafka(type, sample, json, encSize, now), 700);
+}
+
+function step4_kafka(type, sample, json, encSize, now) {
+  counts.kafka++;
+  const offset = 1000 + stats.total;
+  const cipherLen = encSize - 12 - 16;
+
+  pulse('node-kafka');
+  addLog('kafka', `PRODUCER: published to tms.scada.encrypted | partition=0 | offset=${offset} | size=${encSize}B`);
+  addLog('kafka', `CONSUMER: pas-bridge-consumer consumed offset=${offset} | lag=0`);
+
+  // ── Kafka row real values ──
+  setBadgeLive('kafka-live', true);
+  set('r-kafka-pub-offset', offset);
+  set('r-kafka-pub-count',  counts.kafka);
+  set('r-kafka-partition',  '0');
+  set('r-kafka-offset',     offset);
+  set('r-kafka-ts',         now);
+  set('r-kafka-cipherlen',  cipherLen);
+  set('r-kafka-total-size', encSize);
+  set('r-kafka-con-offset', offset);
+  set('r-kafka-con-count',  counts.kafka);
+  set('r-kafka-lag',        '0');
+  set('r-kafka-total',      counts.kafka);
+  flash('kafka-row');
+  setTimeout(() => setBadgeLive('kafka-live', false), 2000);
+
+  updateCount('cnt-kafka', counts.kafka, 'msgs');
+  activateArrow(4);
+  updateStats();
+  setTimeout(() => step5_rabbit(type, sample, json, encSize, now), 700);
+}
+
+function step5_rabbit(type, sample, json, encSize, now) {
+  counts.rabbit++;
+  pulse('node-rabbit');
+  addLog('rabbit', `AMQP publish → exchange: amq.topic | routing-key: tms.scada.pas | size: ${encSize}B`);
+  addLog('rabbit', `MQTT plugin: amq.topic/tms.scada.pas → MQTT tms/scada/pas | QoS:1 | port:8883`);
+
+  const pp = json.platformPredictions && json.platformPredictions[0];
+  const pt = pp && pp.predictedTrains && pp.predictedTrains[0];
+  const ri = json.routeInfo;
+
+  // ── RabbitMQ row real values ──
+  setBadgeLive('rabbit-live', true);
+  set('r-rabbit-ts',       now);
+  set('r-rabbit-pub',      counts.rabbit);
+  set('r-rabbit-mqtt',     counts.rabbit);
+  set('r-rabbit-scada',    counts.rabbit);
+  set('r-rabbit-msgtype',  json.messageType);
+  set('r-rabbit-platform', pp  ? pp.platformId          : (ri ? 'routeInfo' : '—'));
+  set('r-rabbit-trainid',  pt  ? pt.trainId.slice(0,22)+'…' : (ri ? ri.trainGUID.slice(0,22)+'…' : '—'));
+  set('r-rabbit-status',   pt  ? statusLabel(pt.status) : '—');
+  set('r-rabbit-run',      pt  ? pt.runNumber           : '—');
+  set('r-rabbit-arr',      pt  ? pt.arrivalTime + 's'   : '—');
+  flash('rabbit-row');
+  setTimeout(() => setBadgeLive('rabbit-live', false), 2000);
+
+  updateCount('cnt-rabbit', counts.rabbit, 'msgs');
+  activateArrow(5);
+  setTimeout(() => step6_scada(type), 700);
+}
+
+function step6_scada(type) {
+  counts.scada++;
+  pulse('node-scada');
+  addLog('scada', `SCADA receives MQTT byte[] on tms/scada/pas | extracts IV[0..11]`);
+  addLog('security', `AES-256-GCM decrypt → GCM tag verified OK → JSON parsed`);
+  addLog('scada', `messageType: TMS_PAS_UPDATE | ${type} → station display updated`);
+  updateCount('cnt-scada', counts.scada, 'recv');
+  deactivateArrow(5);
+  updateStats();
+}
+
+// ── Helpers ──
+function pulse(id) {
+  const el = document.getElementById(id);
+  el.classList.add('sending');
+  setTimeout(() => el.classList.remove('sending'), 600);
+}
+
+function activateArrow(n) {
+  document.getElementById('arrow-'+n).classList.add('active');
+}
+
+function deactivateArrow(n) {
+  for (let i=1; i<=n; i++) {
+    setTimeout(() => document.getElementById('arrow-'+i).classList.remove('active'), i*100);
+  }
+}
+
+function updateCount(id, n, label) {
+  document.getElementById(id).textContent = n + ' ' + label;
+}
+
+function updateStats() {
+  document.getElementById('stat-total').textContent     = stats.total;
+  document.getElementById('stat-timetable').textContent = stats.timetable;
+  document.getElementById('stat-arrival').textContent   = stats.arrival;
+  document.getElementById('stat-departure').textContent = stats.departure;
+  document.getElementById('stat-route').textContent     = stats.route;
+  document.getElementById('stat-encrypted').textContent = stats.encrypted;
+}
+
+function addLog(tag, msg) {
+  const box  = document.getElementById('logBox');
+  const now  = new Date();
+  const time = now.toTimeString().slice(0,8) + '.' + String(now.getMilliseconds()).padStart(3,'0');
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML =
+    `<span class="log-time">${time}</span>` +
+    `<span class="log-tag ${tag}">${tag.toUpperCase().padEnd(8)}</span>` +
+    `<span class="log-msg">${msg}</span>`;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+function setLive(id, on) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (on) { el.textContent = 'LIVE'; el.classList.add('live'); }
+  else     { el.textContent = 'IDLE'; el.classList.remove('live'); }
+}
+function setBadgeLive(id, on) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (on) { el.textContent = '● LIVE'; el.classList.add('live'); }
+  else     { el.textContent = 'IDLE';  el.classList.remove('live'); }
+}
+function set(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = val;
+}
+function flash(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('active-row');
+  setTimeout(() => el.classList.remove('active-row'), 2000);
+}
+function fakeHex(bytes) {
+  let h = '';
+  for (let i=0;i<bytes;i++) h += ('0'+Math.floor(Math.random()*256).toString(16)).slice(-2);
+  return h.toUpperCase();
+}
+function statusLabel(s) {
+  return s===0?'0 (predicted)':s===1?'1 (at platform)':s===2?'2 (departed)':s;
+}
+
+function syntaxHighlight(json) {
+  return json
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+      m => {
+        let cls='json-num';
+        if (/^"/.test(m)) { cls = /:$/.test(m) ? 'json-key' : 'json-str'; }
+        else if (/true|false/.test(m)) cls='json-bool';
+        return `<span class="${cls}">${m}</span>`;
+      });
+}
+</script>
+</body>
+</html>

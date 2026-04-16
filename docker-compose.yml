@@ -36,6 +36,9 @@ services:
     container_name: test-zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 10
+      ZOOKEEPER_SYNC_LIMIT: 5
     ports:
       - "2181:2181"
 
@@ -49,7 +52,9 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:29092
+      KAFKA_ZOOKEEPER_SESSION_TIMEOUT_MS: "60000"
+      KAFKA_ZOOKEEPER_CONNECTION_TIMEOUT_MS: "60000"
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://host.docker.internal:9092,INTERNAL://kafka:29092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,INTERNAL://0.0.0.0:29092
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
@@ -66,11 +71,12 @@ services:
       - "5672:5672"      # AMQP (our app connects here)
       - "1883:1883"      # MQTT (SCADA API connects here — port 8883 in prod with TLS)
       - "15672:15672"    # Web console (open in browser to see messages)
+      - "15675:15675"    # MQTT over WebSocket (browser SCADA stream viewer)
     environment:
       RABBITMQ_DEFAULT_USER: thiru
       RABBITMQ_DEFAULT_PASS: password
     command: >
-      bash -c "rabbitmq-plugins enable rabbitmq_mqtt &&
+      bash -c "rabbitmq-plugins enable rabbitmq_mqtt rabbitmq_web_mqtt &&
                rabbitmq-server"
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
@@ -88,6 +94,48 @@ services:
     environment:
       KAFKA_BROKERCONNECT: kafka:29092
       JVM_OPTS: "-Xms32M -Xmx64M"
+
+  # ── Bridge App ────────────────────────────────────
+  # The PAS-SCADA-Kafka-Bridge itself.
+  # Built from local Dockerfile; uses prod profile with service hostnames.
+  # Health: http://localhost:8085/actuator/health
+  bridge:
+    build: .
+    container_name: pas-scada-bridge
+    depends_on:
+      - artemis
+      - kafka
+      - rabbitmq
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_PROFILES_ACTIVE: "prod"
+      # ActiveMQ Artemis
+      ARTEMIS_HOST: artemis
+      ARTEMIS_PORT: "61616"
+      ARTEMIS_USER: pasbridge
+      ARTEMIS_PASS: testpass123
+      # Kafka — use internal inter-container listener
+      KAFKA_HOST: kafka
+      KAFKA_PORT: "29092"
+      # RabbitMQ + MQTT plugin
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: thiru
+      RABBITMQ_PASS: password
+      MQTT_HOST: rabbitmq
+      MQTT_PORT: "1883"
+      MQTT_USER: thiru
+      MQTT_PASS: password
+      # Encryption — local test key (32 zero bytes base64, NOT for prod)
+      SCADA_AES_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+      # Pipeline — kafka+rabbitmq only (RabbitMQ MQTT plugin handles MQTT delivery)
+      BRIDGE_PIPELINE: "kafka,rabbitmq"
+      # Monitor — feeds /api/messages and /api/messages/stream
+      BRIDGE_MONITOR_ENABLED: "true"
+      BRIDGE_MONITOR_FROM_EXCHANGE: "amq.topic"
+      BRIDGE_MONITOR_ROUTING_KEY: "tms.scada.pas"
+      BRIDGE_MONITOR_QUEUE: "scada.monitor.queue"
 
 volumes:
   artemis-data:
