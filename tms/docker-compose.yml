@@ -1,19 +1,9 @@
 # ════════════════════════════════════════════════════════════
 # PAS-SCADA-Kafka-Bridge — INTERNAL VM (TMS side)
-#
-# Runs on the internal VM (same network as TMS).
-# Contains: Artemis, Kafka, Zookeeper, Kafdrop, Bridge app
-#
-# Bridge publishes to RabbitMQ on the EXTERNAL VM over the network.
-# Set EXTERNAL_VM_HOST to the external VM's IP/hostname before starting.
-#
-# Run:
-#   EXTERNAL_VM_HOST=10.4.0.24 docker compose -f docker-compose.internal.yml up -d
 # ════════════════════════════════════════════════════════════
 
 services:
 
-  # ── ActiveMQ Artemis — TMS publishes XML here ─────────────
   artemis:
     image: apache/activemq-artemis:2.31.2
     container_name: pas-artemis
@@ -27,7 +17,6 @@ services:
     volumes:
       - artemis-data:/var/lib/artemis-instance
 
-  # ── Kafka + Zookeeper (encrypted audit trail) ─────────────
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: pas-zookeeper
@@ -47,14 +36,13 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${INTERNAL_VM_HOST:-host.docker.internal}:9092,INTERNAL://kafka:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://10.4.0.23:9092,INTERNAL://kafka:29092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,INTERNAL://0.0.0.0:29092
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
 
-  # ── Kafdrop (Kafka Web UI) ────────────────────────────────
   kafdrop:
     image: obsidiandynamics/kafdrop:latest
     container_name: pas-kafdrop
@@ -66,7 +54,6 @@ services:
       KAFKA_BROKERCONNECT: kafka:29092
       JVM_OPTS: "-Xms32M -Xmx64M"
 
-  # ── Bridge App — connects across VMs to external RabbitMQ ─
   bridge:
     build: .
     image: pas-scada-kafka-bridge:latest
@@ -78,28 +65,32 @@ services:
       - "8085:8085"
     environment:
       SPRING_PROFILES_ACTIVE: "prod"
-      # Artemis (local to this VM)
+
+      # Artemis
       ARTEMIS_HOST: artemis
       ARTEMIS_PORT: "61616"
       ARTEMIS_USER: pasbridge
       ARTEMIS_PASS: testpass123
-      # Kafka (local to this VM)
+
+      # Kafka
       KAFKA_HOST: kafka
       KAFKA_PORT: "29092"
-      # RabbitMQ + MQTT — on EXTERNAL VM (must set EXTERNAL_VM_HOST)
-      RABBITMQ_HOST: ${EXTERNAL_VM_HOST:?set EXTERNAL_VM_HOST=<external-vm-ip>}
+
+      # ✅ External VM (Hardcoded now)
+      RABBITMQ_HOST: 10.4.0.10
       RABBITMQ_PORT: "5672"
       RABBITMQ_USER: thiru
       RABBITMQ_PASS: password
-      MQTT_HOST: ${EXTERNAL_VM_HOST}
+
+      MQTT_HOST: 10.4.0.10
       MQTT_PORT: "1883"
       MQTT_USER: thiru
       MQTT_PASS: password
-      # Encryption key (replace in production)
+
       SCADA_AES_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-      # Pipeline
+
       BRIDGE_PIPELINE: "kafka,rabbitmq"
-      # Monitor (feeds /api/messages — consumes from external RabbitMQ)
+
       BRIDGE_MONITOR_ENABLED: "true"
       BRIDGE_MONITOR_FROM_EXCHANGE: "amq.topic"
       BRIDGE_MONITOR_ROUTING_KEY: "tms.scada.pas"
