@@ -1,0 +1,98 @@
+# ═══════════════════════════════════════════════════════════════════
+# ActiveMQ Artemis — TMS-side message broker
+# Receives XML from TMS, consumed by PASInfoConverter + Bridge.
+#
+# Ports:
+#   61616 → OpenWire (JMS clients connect here)
+#    8161 → Web Console (admin UI)
+# Default creds (CHANGE IN PROD via secret):
+#   pasbridge / testpass123
+# ═══════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: artemis-data
+  namespace: pinkline
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: artemis-secret
+  namespace: pinkline
+type: Opaque
+stringData:
+  ARTEMIS_USER: "pasbridge"
+  ARTEMIS_PASSWORD: "testpass123"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: artemis
+  namespace: pinkline
+  labels:
+    app: artemis
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate                   # avoid two replicas writing same PVC
+  selector:
+    matchLabels:
+      app: artemis
+  template:
+    metadata:
+      labels:
+        app: artemis
+    spec:
+      containers:
+        - name: artemis
+          image: apache/activemq-artemis:2.31.2
+          ports:
+            - containerPort: 61616
+              name: openwire
+            - containerPort: 8161
+              name: console
+          env:
+            - name: ARTEMIS_USER
+              valueFrom:
+                secretKeyRef:
+                  name: artemis-secret
+                  key: ARTEMIS_USER
+            - name: ARTEMIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: artemis-secret
+                  key: ARTEMIS_PASSWORD
+            - name: ANONYMOUS_LOGIN
+              value: "false"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/artemis-instance
+          resources:
+            requests: { memory: "512Mi", cpu: "250m" }
+            limits:   { memory: "1Gi",   cpu: "500m" }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: artemis-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: artemis-service
+  namespace: pinkline
+spec:
+  selector:
+    app: artemis
+  ports:
+    - name: openwire
+      port: 61616
+      targetPort: 61616
+    - name: console
+      port: 8161
+      targetPort: 8161
+  type: ClusterIP

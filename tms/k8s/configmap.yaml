@@ -4,25 +4,42 @@ metadata:
   name: bridge-config
   namespace: pinkline
 data:
-  # ── Matches application-prod.properties variable names exactly ────
+  # ═══════════════════════════════════════════════════════════════════
+  # Bridge config — binds to application-prod.properties ${ENV_VAR} refs
+  # Every value below is configurable. DevOps: edit, then apply.
+  # ═══════════════════════════════════════════════════════════════════
   SPRING_PROFILES_ACTIVE: "prod"
 
-  # camel.component.activemq.broker-url=tcp://${ARTEMIS_HOST}:${ARTEMIS_PORT}
+  # ── ActiveMQ Artemis (IN-CLUSTER: same namespace, Service DNS) ─────
+  # camel.component.activemq.broker-url = tcp://${ARTEMIS_HOST}:${ARTEMIS_PORT}
   ARTEMIS_HOST: "artemis-service"
   ARTEMIS_PORT: "61616"
 
-  # kafka.brokers=${KAFKA_HOST}:${KAFKA_PORT}
+  # ── Kafka (IN-CLUSTER: same namespace, Service DNS) ────────────────
+  # kafka.brokers = ${KAFKA_HOST}:${KAFKA_PORT}
   KAFKA_HOST: "kafka-service"
   KAFKA_PORT: "9092"
 
-  # spring.rabbitmq.host=${RABBITMQ_HOST}
-  # spring.rabbitmq.port=${RABBITMQ_PORT}
-  RABBITMQ_HOST: "rabbitmq-service"
-  RABBITMQ_PORT: "5672"
+  # ── RabbitMQ (EXTERNAL VM / SCADA cluster — cross-VM reach) ────────
+  # ▼ REPLACE with the external VM's reachable address ▼
+  #   - NodePort:     use the external VM's node IP/DNS, port=30672
+  #   - LoadBalancer: use the LB external IP, port=5672
+  # spring.rabbitmq.host = ${RABBITMQ_HOST}
+  # spring.rabbitmq.port = ${RABBITMQ_PORT}
+  RABBITMQ_HOST: "EXTERNAL-VM-IP-OR-DNS"
+  RABBITMQ_PORT: "30672"            # NodePort default — change to 5672 if LB
 
-  # bridge.mqtt.broker-url=tcp://${MQTT_HOST}:${MQTT_PORT}
-  MQTT_HOST: "rabbitmq-service"
-  MQTT_PORT: "1883"
+  # ── MQTT (same external RabbitMQ broker, MQTT plugin) ──────────────
+  # bridge.mqtt.broker-url = tcp://${MQTT_HOST}:${MQTT_PORT}
+  MQTT_HOST: "EXTERNAL-VM-IP-OR-DNS"
+  MQTT_PORT: "31883"                # NodePort default — change to 1883 if LB
 
-  # TLS — commented out, DevOps will add when ready:
+  # ── Bridge pipeline & behaviour (configurable per env) ─────────────
+  BRIDGE_PIPELINE: "kafka,rabbitmq,mqtt"
+  BRIDGE_MONITOR_ENABLED: "true"
+  BRIDGE_MONITOR_FROM_EXCHANGE: "amq.topic"
+  BRIDGE_MONITOR_ROUTING_KEY: "tms.scada.pas"
+  BRIDGE_MONITOR_QUEUE: "scada.monitor.queue"
+
+  # ── TLS (uncomment when DevOps mounts the truststore Secret) ───────
   # TLS_TRUSTSTORE_PATH: "/etc/ssl/bridge/truststore.jks"
