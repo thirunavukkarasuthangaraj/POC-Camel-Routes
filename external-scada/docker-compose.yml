@@ -33,23 +33,28 @@ services:
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
 
-  # ── SCADA API (placeholder — replace with real image) ─────
-  # Consumes messages from RabbitMQ/MQTT and forwards to SCADA.
-  # Uncomment and set the image when ready.
-  #
-  # scada-api:
-  #   image: pinkline/scada-api:latest
-  #   container_name: pas-scada-api
-  #   depends_on:
-  #     - rabbitmq
-  #   ports:
-  #     - "8090:8090"
-  #   environment:
-  #     MQTT_HOST: rabbitmq
-  #     MQTT_PORT: "1883"
-  #     MQTT_USER: thiru
-  #     MQTT_PASS: password
-  #     MQTT_TOPIC: "tms/scada/pas"
+  # ── SCADA API (mock) ──────────────────────────────────────
+  # Subscribes to MQTT tms/scada/pas, decrypts AES-GCM payload,
+  # exposes received messages via HTTP.
+  #   Browse:   http://<ext-vm-ip>:8090/          (health + stats)
+  #             http://<ext-vm-ip>:8090/messages  (last 100 decrypted)
+  #             http://<ext-vm-ip>:8090/stream    (live SSE stream)
+  # Replace this with real SCADA API image when available.
+  scada-api:
+    build: ./scada-api
+    container_name: pas-scada-api
+    depends_on:
+      - rabbitmq
+    ports:
+      - "8090:8090"
+    environment:
+      MQTT_HOST: rabbitmq
+      MQTT_PORT: "1883"
+      MQTT_USER: thiru
+      MQTT_PASS: password
+      MQTT_TOPIC: "tms/scada/pas"
+      # Must match the AES key the bridge used to encrypt.
+      SCADA_AES_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
 volumes:
   rabbitmq-data:
