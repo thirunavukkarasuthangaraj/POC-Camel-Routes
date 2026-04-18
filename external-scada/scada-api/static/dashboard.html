@@ -192,6 +192,12 @@
     <span>Last TMS msg: <b id="last-in">—</b></span>
     <span>Last KA sent: <b id="last-ka">—</b></span>
     <span>Next KA in: <span class="countdown" id="next-ka">—</span></span>
+    <span>TMS silent: <span class="countdown" id="tms-silence">—</span></span>
+    <span>TMS status: <span id="tms-status" class="pill"><span class="dot"></span><span id="tms-status-txt">unknown</span></span></span>
+    <label style="display:inline-flex; align-items:center; gap:4px; margin:0;">
+      TMS timeout (s)
+      <input type="number" id="tms-timeout" value="90" min="10" max="600" style="width:70px; display:inline-block;">
+    </label>
   </section>
 
 </main>
@@ -343,20 +349,69 @@ async function loadInitial() {
   outList.slice().reverse().forEach(renderOutMsg);
 }
 
-// Countdown until next KA
+// Countdown until next KA + TMS silence watchdog
 setInterval(() => {
-  if (!runtime.keepalive_seconds) return;
-  if (runtime.keepalive_paused) {
-    document.getElementById('next-ka').textContent = 'PAUSED';
+  // ── Next KeepAlive countdown (outgoing)
+  if (runtime.keepalive_seconds) {
+    if (runtime.keepalive_paused) {
+      document.getElementById('next-ka').textContent = 'PAUSED';
+    } else if (!lastKAtime) {
+      document.getElementById('next-ka').textContent = '—';
+    } else {
+      const elapsed = (Date.now() - lastKAtime.getTime()) / 1000;
+      const remaining = Math.max(0, runtime.keepalive_seconds - elapsed);
+      document.getElementById('next-ka').textContent = remaining.toFixed(1) + 's';
+    }
+  }
+
+  // ── TMS silence watchdog (incoming) ─────────────────────────────
+  //   If we don't hear from TMS within timeout threshold, mark LOST.
+  //   This demonstrates the "TMS not received for that duration → issue"
+  //   contract — same mechanism TMS uses against us when we pause KA.
+  const timeoutSec   = Number(document.getElementById('tms-timeout').value) || 90;
+  const silenceEl    = document.getElementById('tms-silence');
+  const statusPill   = document.getElementById('tms-status');
+  const statusDot    = statusPill.querySelector('.dot');
+  const statusTxt    = document.getElementById('tms-status-txt');
+
+  if (!runtime.last_tms_received) {
+    silenceEl.textContent = 'never received';
+    silenceEl.style.color = 'var(--muted)';
+    statusDot.className = 'dot';
+    statusTxt.textContent = 'no data yet';
     return;
   }
-  if (!lastKAtime) {
-    document.getElementById('next-ka').textContent = '—';
-    return;
+
+  const silenceSec = (Date.now() - new Date(runtime.last_tms_received).getTime()) / 1000;
+  silenceEl.textContent = silenceSec.toFixed(1) + 's';
+
+  if (silenceSec > timeoutSec) {
+    // TMS is considered LOST
+    silenceEl.style.color = 'var(--err)';
+    statusDot.className = 'dot off pulse';
+    statusTxt.textContent = 'LOST';
+    statusPill.style.background = '#3f1515';
+    statusPill.style.borderColor = 'var(--err)';
+    // Flash header for attention
+    document.querySelector('header').style.borderBottomColor = 'var(--err)';
+  } else if (silenceSec > timeoutSec * 0.7) {
+    // Warning zone — approaching timeout
+    silenceEl.style.color = 'var(--warn)';
+    statusDot.className = 'dot';
+    statusDot.style.background = 'var(--warn)';
+    statusTxt.textContent = 'WARNING';
+    statusPill.style.background = '';
+    statusPill.style.borderColor = 'var(--warn)';
+  } else {
+    // Healthy
+    silenceEl.style.color = 'var(--ok)';
+    statusDot.className = 'dot on';
+    statusDot.style.background = '';
+    statusTxt.textContent = 'OK';
+    statusPill.style.background = '';
+    statusPill.style.borderColor = 'var(--line)';
+    document.querySelector('header').style.borderBottomColor = 'var(--line)';
   }
-  const elapsed = (Date.now() - lastKAtime.getTime()) / 1000;
-  const remaining = Math.max(0, runtime.keepalive_seconds - elapsed);
-  document.getElementById('next-ka').textContent = remaining.toFixed(1) + 's';
 }, 200);
 
 // SSE stream
