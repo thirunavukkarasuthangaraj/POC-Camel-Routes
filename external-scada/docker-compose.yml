@@ -1,0 +1,55 @@
+# ════════════════════════════════════════════════════════════
+# PAS-SCADA-Kafka-Bridge — EXTERNAL VM (SCADA side)
+#
+# Runs on the external VM (same network as SCADA systems).
+# Contains: RabbitMQ (with MQTT plugin), SCADA API placeholder
+#
+# Internal VM's bridge connects here over the network.
+# Expose ports to the internal VM's subnet (firewall: 5672, 1883).
+#
+# Run:
+#   docker compose -f docker-compose.external.yml up -d
+# ════════════════════════════════════════════════════════════
+
+services:
+
+  # ── RabbitMQ (AMQP + MQTT + Web MQTT) ─────────────────────
+  # Bridge on internal VM publishes here via AMQP (5672).
+  # SCADA API subscribes via MQTT (1883) or AMQP.
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: pas-rabbitmq
+    ports:
+      - "5672:5672"      # AMQP — bridge on internal VM connects here
+      - "1883:1883"      # MQTT — SCADA API / devices subscribe
+      - "15672:15672"    # Management console
+      - "15675:15675"    # MQTT over WebSocket (browser SCADA viewer)
+    environment:
+      RABBITMQ_DEFAULT_USER: thiru
+      RABBITMQ_DEFAULT_PASS: password
+    command: >
+      bash -c "rabbitmq-plugins enable rabbitmq_mqtt rabbitmq_web_mqtt &&
+               rabbitmq-server"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+
+  # ── SCADA API (placeholder — replace with real image) ─────
+  # Consumes messages from RabbitMQ/MQTT and forwards to SCADA.
+  # Uncomment and set the image when ready.
+  #
+  # scada-api:
+  #   image: pinkline/scada-api:latest
+  #   container_name: pas-scada-api
+  #   depends_on:
+  #     - rabbitmq
+  #   ports:
+  #     - "8090:8090"
+  #   environment:
+  #     MQTT_HOST: rabbitmq
+  #     MQTT_PORT: "1883"
+  #     MQTT_USER: thiru
+  #     MQTT_PASS: password
+  #     MQTT_TOPIC: "tms/scada/pas"
+
+volumes:
+  rabbitmq-data:

@@ -1,13 +1,18 @@
-version: '3.8'
-
 # ════════════════════════════════════════════════════════════
-# PAS-SCADA-Kafka-Bridge — Local Test Environment
+# PAS-SCADA-Kafka-Bridge — ALL-IN-ONE Local Dev Compose
 #
-# Starts all 3 servers locally so you can test without
-# connecting to the real Pink Line servers.
+# Single-machine dev/test: runs Artemis + Kafka + RabbitMQ +
+# Bridge + Kafdrop all on one Docker network.
 #
-# Run:  docker-compose up -d
-# Stop: docker-compose down
+# Build context for bridge is ./tms (source moved there after
+# the two-VM split).
+#
+# For real 2-VM deployment use:
+#   tms/docker-compose.yml           (on internal VM)
+#   external-scada/docker-compose.yml (on external VM)
+#
+# Run:  docker compose up -d
+# Stop: docker compose down
 # ════════════════════════════════════════════════════════════
 
 services:
@@ -100,7 +105,7 @@ services:
   # Built from local Dockerfile; uses prod profile with service hostnames.
   # Health: http://localhost:8085/actuator/health
   bridge:
-    build: .
+    build: ./tms
     container_name: pas-scada-bridge
     depends_on:
       - artemis
