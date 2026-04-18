@@ -75,15 +75,29 @@ CREATOR_ID = os.getenv("SCADA_CREATOR_ID", "ScateX")
 AES_KEY_B64 = os.getenv("SCADA_AES_KEY", "")
 AES_KEY = base64.b64decode(AES_KEY_B64) if AES_KEY_B64 else None
 
-# Runtime-mutable config (set via POST /api/config or dashboard)
+# Runtime-mutable config — EVERY value below is editable live via
+# POST /api/config and takes effect immediately. Nothing is a restart
+# requirement. Dashboard reflects changes via SSE.
 runtime = {
-    "keepalive_seconds":   30,
-    "auto_alarm_seconds":  10,   # 0 = disabled
-    "auto_alarm_enabled":  True,
-    "keepalive_paused":    False,
-    "mqtt_connected":      False,
-    "last_keepalive_sent": None,
-    "last_tms_received":   None,
+    # ── Timer intervals ─────────────────────────
+    "keepalive_seconds":      30,
+    "auto_alarm_seconds":     10,     # 0 = disabled
+    "auto_alarm_enabled":     True,
+    "keepalive_paused":       False,
+
+    # ── Identity & topics (mutable) ─────────────
+    "creator_id":             CREATOR_ID,
+    "topic_out":              TOPIC_OUT,
+    "topic_in":               TOPIC_IN,
+
+    # ── Equipment list (mutable via /api/config) ─
+    "equipment":              [],     # filled below after class defs
+
+    # ── Runtime status (read-only from dashboard) ─
+    "mqtt_connected":         False,
+    "last_keepalive_sent":    None,
+    "last_tms_received":      None,
+    "last_alarm_sent":        None,
 }
 
 # ── In-memory stores ──────────────────────────────────────────────────
@@ -104,8 +118,9 @@ stats = {
 
 sse_queues: list[Queue] = []
 
-# Sample equipment for simulated alarms
-EQUIPMENT = [
+# Default equipment list — used to seed runtime["equipment"]
+# Fully mutable via POST /api/config {"equipment": [...]}
+DEFAULT_EQUIPMENT = [
     "ESC_ROL_1_23", "ESC_ROL_2_27", "ESC_ROL_3_15",
     "DOOR_PLT_2_3", "DOOR_PLT_1_1", "DOOR_STN_1_MAIN",
     "ELV_STN_4_01", "ELV_STN_2_03",
@@ -114,6 +129,12 @@ EQUIPMENT = [
     "HVAC_PLT_1", "FIRE_DETECT_OFFICE_A",
     "CCTV_PLT_2_CAM5",
 ]
+runtime["equipment"] = list(DEFAULT_EQUIPMENT)
+
+# Rolling-window rate tracking (60-sec window for msgs/sec calc)
+from collections import deque as _deque
+_rate_window_in  = _deque(maxlen=600)   # timestamps of received msgs
+_rate_window_out = _deque(maxlen=600)   # timestamps of sent msgs
 
 app = Flask(__name__, static_folder="static")
 mqtt_client: mqtt.Client | None = None
@@ -170,6 +191,7 @@ def on_disconnect(client, userdata, rc):
 
 def on_message(client, userdata, msg):
     stats["received"] += 1
+    _rate_window_in.append(time.time())
     runtime["last_tms_received"] = now_iso()
     entry = {
         "id":         stats["received"],
@@ -200,6 +222,7 @@ def publish(topic: str, envelope: dict, kind: str):
         return False
     payload = json.dumps(envelope).encode("utf-8")
     mqtt_client.publish(topic, payload, qos=0)
+    _rate_window_out.append(time.time())
     record = {
         "id":        sum([stats["sent_alarm"], stats["sent_ka"], stats["sent_all"]]),
         "sentAt":    now_iso(),
@@ -219,14 +242,15 @@ def publish_update_alarm(alarm_id: str, state: str):
         "State":     str(state),
     }
     envelope = {
-        "CreatorId": CREATOR_ID,
+        "CreatorId": runtime["creator_id"],
         "Type":      "UpdateAlarm",
         "Timestamp": now_rsae(),
         "Alarm":     alarm,
     }
     alarm_db[alarm_id] = alarm
-    if publish(TOPIC_OUT, envelope, "UpdateAlarm"):
+    if publish(runtime["topic_out"], envelope, "UpdateAlarm"):
         stats["sent_alarm"] += 1
+        runtime["last_alarm_sent"] = now_iso()
         return True
     return False
 
@@ -235,11 +259,11 @@ def publish_keepalive():
     if runtime["keepalive_paused"]:
         return False
     envelope = {
-        "CreatorId": CREATOR_ID,
+        "CreatorId": runtime["creator_id"],
         "Type":      "KeepAlive",
         "Timestamp": now_rsae(),
     }
-    ok = publish(TOPIC_OUT, envelope, "KeepAlive")
+    ok = publish(runtime["topic_out"], envelope, "KeepAlive")
     if ok:
         stats["sent_ka"] += 1
         runtime["last_keepalive_sent"] = now_iso()
@@ -249,15 +273,22 @@ def publish_keepalive():
 
 def send_all_alarms():
     envelope = {
-        "CreatorId": CREATOR_ID,
+        "CreatorId": runtime["creator_id"],
         "Type":      "SendAllAlarms",
         "Timestamp": now_rsae(),
         "Alarms":    list(alarm_db.values()),
     }
-    ok = publish(TOPIC_OUT, envelope, "SendAllAlarms")
+    ok = publish(runtime["topic_out"], envelope, "SendAllAlarms")
     if ok:
         stats["sent_all"] += 1
     return ok
+
+
+def compute_rate(window: "_deque") -> float:
+    """Messages per second over the last 60s, live computation."""
+    now = time.time()
+    recent = [t for t in window if now - t <= 60.0]
+    return round(len(recent) / 60.0, 2)
 
 
 # ── Timers — runtime-configurable intervals ──────────────────────────
@@ -279,11 +310,15 @@ def auto_alarm_timer():
         time.sleep(1)
         if (not runtime["auto_alarm_enabled"] or
                 not runtime["mqtt_connected"] or
-                runtime["auto_alarm_seconds"] <= 0):
+                runtime["auto_alarm_seconds"] <= 0 or
+                not runtime["equipment"]):
             continue
-        time.sleep(runtime["auto_alarm_seconds"] - 1)
-        if runtime["auto_alarm_enabled"] and runtime["mqtt_connected"]:
-            eq = random.choice(EQUIPMENT)
+        # Sleep rest of the interval (picks up runtime changes on next tick)
+        time.sleep(max(0, runtime["auto_alarm_seconds"] - 1))
+        if (runtime["auto_alarm_enabled"] and
+                runtime["mqtt_connected"] and
+                runtime["equipment"]):
+            eq = random.choice(runtime["equipment"])
             state = random.choice(["0", "1", "0", "0"])  # skewed toward OK
             publish_update_alarm(eq, state)
 
@@ -352,18 +387,64 @@ def api_alarms():
     ])
 
 
+@app.route("/api/metrics")
+def api_metrics():
+    """Live throughput + latency metrics for the flow diagram."""
+    last_in  = runtime.get("last_tms_received")
+    last_out = runtime.get("last_keepalive_sent")
+    silence_in  = (datetime.now(timezone.utc) - datetime.fromisoformat(last_in)).total_seconds() if last_in else None
+    silence_out = (datetime.now(timezone.utc) - datetime.fromisoformat(last_out)).total_seconds() if last_out else None
+    return jsonify({
+        "rate_in_per_sec":   compute_rate(_rate_window_in),
+        "rate_out_per_sec":  compute_rate(_rate_window_out),
+        "silence_in_sec":    silence_in,
+        "silence_out_sec":   silence_out,
+        "total_received":    stats["received"],
+        "total_sent":        stats["sent_alarm"] + stats["sent_ka"] + stats["sent_all"],
+        "mqtt_connected":    runtime["mqtt_connected"],
+    })
+
+
 @app.route("/api/config", methods=["POST"])
 def api_config():
+    """Every runtime value configurable from dashboard. No restart needed."""
     body = request.get_json(force=True, silent=True) or {}
+
+    # Numeric intervals
     for key in ("keepalive_seconds", "auto_alarm_seconds"):
         if key in body:
             try:
                 runtime[key] = max(0, int(body[key]))
             except Exception:
                 pass
+
+    # Booleans
     for key in ("auto_alarm_enabled", "keepalive_paused"):
         if key in body:
             runtime[key] = bool(body[key])
+
+    # Strings (identity + topics)
+    for key in ("creator_id", "topic_out"):
+        if key in body and isinstance(body[key], str) and body[key].strip():
+            runtime[key] = body[key].strip()
+
+    # topic_in change requires MQTT re-subscribe
+    if "topic_in" in body and isinstance(body["topic_in"], str) and body["topic_in"].strip():
+        old = runtime["topic_in"]
+        new = body["topic_in"].strip()
+        if new != old and mqtt_client and runtime["mqtt_connected"]:
+            try:
+                mqtt_client.unsubscribe(old)
+                mqtt_client.subscribe(new)
+                print(f"[scada-api] re-subscribed {old} → {new}", flush=True)
+            except Exception as e:
+                print(f"[scada-api] topic_in swap failed: {e}", flush=True)
+        runtime["topic_in"] = new
+
+    # Equipment list
+    if "equipment" in body and isinstance(body["equipment"], list):
+        runtime["equipment"] = [str(x).strip() for x in body["equipment"] if str(x).strip()]
+
     broadcast_sse("config", runtime)
     return jsonify(runtime)
 
