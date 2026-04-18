@@ -350,13 +350,12 @@ def index():
 @app.route("/api/status")
 def api_status():
     return jsonify({
-        "creatorId":  CREATOR_ID,
+        "creatorId":  runtime["creator_id"],
         "mqtt": {
-            "host":    MQTT_HOST,
-            "port":    MQTT_PORT,
-            "topicIn": TOPIC_IN,
-            "topicOut": TOPIC_OUT,
-            "topicKeepAlive": TOPIC_KA,
+            "host":     MQTT_HOST,
+            "port":     MQTT_PORT,
+            "topicIn":  runtime["topic_in"],
+            "topicOut": runtime["topic_out"],
             "connected": runtime["mqtt_connected"],
         },
         "runtime":    runtime,
