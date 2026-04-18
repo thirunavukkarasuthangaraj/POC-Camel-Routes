@@ -19,6 +19,7 @@ services:
   rabbitmq:
     image: rabbitmq:3.12-management
     container_name: pas-rabbitmq
+    restart: unless-stopped
     ports:
       - "5672:5672"      # AMQP — bridge on internal VM connects here
       - "1883:1883"      # MQTT — SCADA API / devices subscribe
@@ -30,6 +31,11 @@ services:
     command: >
       bash -c "rabbitmq-plugins enable rabbitmq_mqtt rabbitmq_web_mqtt &&
                rabbitmq-server"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
 
@@ -43,8 +49,10 @@ services:
   scada-api:
     build: ./scada-api
     container_name: pas-scada-api
+    restart: unless-stopped          # auto-restart on crash or VM reboot
     depends_on:
-      - rabbitmq
+      rabbitmq:
+        condition: service_healthy   # wait until RabbitMQ is actually ready
     ports:
       - "8090:8090"
     environment:
@@ -52,9 +60,17 @@ services:
       MQTT_PORT: "1883"
       MQTT_USER: thiru
       MQTT_PASS: password
-      MQTT_TOPIC: "tms/scada/pas"
+      MQTT_TOPIC_IN:  "tms/scada/pas"
+      MQTT_TOPIC_OUT: "scada/tms/alarms"
+      SCADA_CREATOR_ID: "ScateX"
       # Must match the AES key the bridge used to encrypt.
       SCADA_AES_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request as r; r.urlopen(\"http://localhost:8090/api/status\").read()'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
 volumes:
   rabbitmq-data:
