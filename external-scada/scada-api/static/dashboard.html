@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SCADA Simulator — Live Dashboard</title>
+<style>
+  :root {
+    --bg:#0b1220; --panel:#121b2e; --line:#1e2a44;
+    --txt:#e2e8f0; --muted:#7c8db0; --accent:#22d3ee;
+    --ok:#10b981; --warn:#f59e0b; --err:#ef4444;
+    --in:#38bdf8; --out:#a78bfa;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--bg); color:var(--txt);
+    font-family:-apple-system,Segoe UI,Inter,Roboto,sans-serif;
+    font-size:13px; line-height:1.45;
+  }
+  header {
+    padding:12px 18px; background:#0f1829;
+    border-bottom:1px solid var(--line);
+    display:flex; justify-content:space-between; align-items:center;
+    flex-wrap:wrap; gap:12px;
+  }
+  header h1 { margin:0; font-size:16px; color:var(--accent); letter-spacing:.5px; }
+  header .pill {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:3px 10px; border-radius:999px; background:var(--panel);
+    font-size:12px; border:1px solid var(--line);
+  }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--muted); }
+  .dot.on  { background:var(--ok); box-shadow:0 0 8px var(--ok); }
+  .dot.off { background:var(--err); box-shadow:0 0 6px var(--err); }
+  .dot.pulse { animation:pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(1.2)} }
+
+  main {
+    padding:14px; display:grid;
+    grid-template-columns: 300px 1fr 1fr; gap:14px;
+    max-width:100%; min-height:calc(100vh - 58px);
+  }
+  .panel {
+    background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    padding:14px; overflow:auto;
+  }
+  .panel h2 {
+    margin:0 0 10px; font-size:13px; letter-spacing:.6px;
+    color:var(--muted); text-transform:uppercase;
+    padding-bottom:8px; border-bottom:1px solid var(--line);
+  }
+  .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:12px; }
+  .stat-grid div:nth-child(odd) { color:var(--muted); }
+
+  label { display:block; margin:10px 0 4px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
+  input[type="number"], input[type="text"], select {
+    width:100%; padding:6px 8px; background:#0b1426;
+    color:var(--txt); border:1px solid var(--line); border-radius:4px;
+    font-family:inherit; font-size:13px;
+  }
+  input:focus, select:focus { outline:none; border-color:var(--accent); }
+
+  button {
+    background:var(--accent); color:#042f2e; border:none;
+    padding:7px 12px; border-radius:4px; cursor:pointer; font-weight:600;
+    font-size:12px; margin-top:6px; width:100%;
+  }
+  button:hover { filter:brightness(1.1); }
+  button.warn { background:var(--warn); color:#422006; }
+  button.err  { background:var(--err);  color:#fff; }
+  button.ghost { background:transparent; border:1px solid var(--line); color:var(--txt); }
+
+  .toggle-row { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:8px 0; }
+
+  .msg-list { max-height:65vh; overflow-y:auto; }
+  .msg {
+    padding:8px 10px; margin-bottom:6px; border-radius:5px;
+    background:#0b1426; border-left:3px solid var(--line); font-size:12px;
+  }
+  .msg.in  { border-left-color:var(--in); }
+  .msg.out { border-left-color:var(--out); }
+  .msg.out.UpdateAlarm    { border-left-color:#f59e0b; }
+  .msg.out.KeepAlive      { border-left-color:#10b981; }
+  .msg.out.SendAllAlarms  { border-left-color:#a78bfa; }
+  .msg-header {
+    display:flex; justify-content:space-between; font-size:11px; color:var(--muted);
+    margin-bottom:4px;
+  }
+  .msg-body { font-family:Consolas,Monaco,monospace; font-size:11px; word-break:break-all; white-space:pre-wrap; color:#cbd5e1; max-height:160px; overflow-y:auto; }
+  .badge {
+    display:inline-block; padding:1px 6px; border-radius:3px;
+    font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px;
+    background:#1e2a44;
+  }
+  .badge.UpdateAlarm { background:#7c2d12; color:#fed7aa; }
+  .badge.KeepAlive   { background:#064e3b; color:#bbf7d0; }
+  .badge.SendAllAlarms { background:#4c1d95; color:#e9d5ff; }
+  .badge.GetAllAlarms  { background:#7c2d12; color:#fef3c7; }
+
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th, td { padding:5px 8px; text-align:left; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.4px; }
+  td.state-0 { color:var(--ok); }
+  td.state-1 { color:var(--err); font-weight:700; }
+
+  .footer-bar {
+    grid-column:1 / -1; padding:10px 14px;
+    background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px;
+    font-size:12px; color:var(--muted);
+  }
+  .countdown { color:var(--accent); font-weight:700; font-family:Consolas,monospace; }
+  .topic { color:#93c5fd; font-family:Consolas,monospace; font-size:11px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🛰 SCADA Simulator Dashboard</h1>
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <span class="pill"><span id="mqtt-dot" class="dot"></span> MQTT <span id="mqtt-txt">connecting…</span></span>
+    <span class="pill">CreatorId <b id="creator-id">-</b></span>
+    <span class="pill">Topic OUT <span class="topic" id="topic-out">-</span></span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ════════════ LEFT: CONFIG + CONTROLS ════════════════════════ -->
+  <section class="panel">
+    <h2>⚙ Runtime Config</h2>
+
+    <label>KeepAlive Interval (seconds)</label>
+    <input type="number" id="ka-int" min="1" max="3600" value="30">
+    <button onclick="saveConfig({keepalive_seconds:Number(document.getElementById('ka-int').value)})">Save KeepAlive</button>
+
+    <label>Auto-alarm Interval (seconds, 0 = off)</label>
+    <input type="number" id="aa-int" min="0" max="3600" value="10">
+    <button onclick="saveConfig({auto_alarm_seconds:Number(document.getElementById('aa-int').value)})">Save Alarm Interval</button>
+
+    <div class="toggle-row">
+      <span>Auto-alarm enabled</span>
+      <input type="checkbox" id="aa-en" onchange="saveConfig({auto_alarm_enabled:this.checked})">
+    </div>
+
+    <hr style="margin:14px 0; border:none; border-top:1px solid var(--line);">
+
+    <h2 style="margin-top:0;">🚨 Connection Control</h2>
+    <button class="warn" id="pause-btn" onclick="togglePause()">Pause KeepAlive (simulate cut)</button>
+    <button class="ghost" onclick="sendAll()">Trigger SendAllAlarms</button>
+
+    <hr style="margin:14px 0; border:none; border-top:1px solid var(--line);">
+
+    <h2 style="margin-top:0;">📤 Manual UpdateAlarm</h2>
+    <label>Alarm ID</label>
+    <select id="m-alarm-id"></select>
+    <label>State</label>
+    <select id="m-alarm-state">
+      <option value="0">0 — OFF / normal</option>
+      <option value="1">1 — ON / fault</option>
+      <option value="2">2 — maintenance</option>
+    </select>
+    <button onclick="publishManual()">Publish UpdateAlarm</button>
+
+    <hr style="margin:14px 0; border:none; border-top:1px solid var(--line);">
+
+    <h2 style="margin-top:0;">📊 Stats</h2>
+    <div class="stat-grid" id="stats"></div>
+  </section>
+
+  <!-- ════════════ MIDDLE: RECEIVED FROM TMS ════════════════════════ -->
+  <section class="panel">
+    <h2>↙ Received FROM TMS (decrypted)</h2>
+    <div class="msg-list" id="in-list"></div>
+  </section>
+
+  <!-- ════════════ RIGHT: SENT TO TMS ════════════════════════ -->
+  <section class="panel">
+    <h2>↗ Sent TO TMS (RSAE envelope — 4 types on 1 topic)</h2>
+    <div class="msg-list" id="out-list"></div>
+  </section>
+
+  <!-- ════════════ BOTTOM: ALARM STATE TABLE ════════════════════════ -->
+  <section class="footer-bar" style="display:block;">
+    <h2 style="margin:0 0 8px; font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px;">📋 Current Alarm State</h2>
+    <table id="alarm-table">
+      <thead><tr><th>Alarm ID</th><th>State</th><th>Last Updated</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section class="footer-bar">
+    <span>Last TMS msg: <b id="last-in">—</b></span>
+    <span>Last KA sent: <b id="last-ka">—</b></span>
+    <span>Next KA in: <span class="countdown" id="next-ka">—</span></span>
+  </section>
+
+</main>
+
+<script>
+const EQ = ["ESC_ROL_1_23","ESC_ROL_2_27","ESC_ROL_3_15",
+            "DOOR_PLT_2_3","DOOR_PLT_1_1","DOOR_STN_1_MAIN",
+            "ELV_STN_4_01","ELV_STN_2_03",
+            "DNVEL01.ALC.ED06","DNVEL02.ALC.ED06",
+            "PUMP_DRY_1","PUMP_DRY_2",
+            "HVAC_PLT_1","FIRE_DETECT_OFFICE_A","CCTV_PLT_2_CAM5"];
+const sel = document.getElementById('m-alarm-id');
+EQ.forEach(e => { const o=document.createElement('option'); o.value=e; o.text=e; sel.appendChild(o); });
+
+let runtime = {};
+let lastKAtime = null;
+
+async function fetchStatus() {
+  try {
+    const r = await fetch('/api/status');
+    const s = await r.json();
+    renderStatus(s);
+  } catch (e) { console.error(e); }
+}
+
+function renderStatus(s) {
+  runtime = s.runtime || {};
+  document.getElementById('mqtt-dot').className = 'dot ' + (runtime.mqtt_connected ? 'on pulse' : 'off');
+  document.getElementById('mqtt-txt').textContent = runtime.mqtt_connected ? 'connected' : 'offline';
+  document.getElementById('creator-id').textContent = s.creatorId;
+  document.getElementById('topic-out').textContent = s.mqtt.topicOut;
+  document.getElementById('ka-int').value = runtime.keepalive_seconds;
+  document.getElementById('aa-int').value = runtime.auto_alarm_seconds;
+  document.getElementById('aa-en').checked = runtime.auto_alarm_enabled;
+
+  const pauseBtn = document.getElementById('pause-btn');
+  pauseBtn.textContent = runtime.keepalive_paused ? '▶ Resume KeepAlive' : '⏸ Pause KeepAlive (simulate cut)';
+  pauseBtn.className = runtime.keepalive_paused ? 'err' : 'warn';
+
+  document.getElementById('last-in').textContent = runtime.last_tms_received || '—';
+  document.getElementById('last-ka').textContent = runtime.last_keepalive_sent || '—';
+  lastKAtime = runtime.last_keepalive_sent ? new Date(runtime.last_keepalive_sent) : null;
+
+  // Stats
+  const g = document.getElementById('stats');
+  g.innerHTML = '';
+  const statsToShow = {
+    "Received":      s.stats.received,
+    "Sent (alarm)":  s.stats.sent_alarm,
+    "Sent (KA)":     s.stats.sent_ka,
+    "Sent (All)":    s.stats.sent_all,
+    "Decrypt OK":    s.stats.decrypt_ok,
+    "Decrypt Fail":  s.stats.decrypt_fail,
+    "Alarms tracked": s.alarmCount,
+  };
+  Object.entries(statsToShow).forEach(([k,v]) => {
+    g.innerHTML += `<div>${k}</div><div style="text-align:right;"><b>${v}</b></div>`;
+  });
+}
+
+async function saveConfig(patch) {
+  const r = await fetch('/api/config', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(patch)
+  });
+  const rt = await r.json();
+  runtime = rt;
+  flashOK();
+}
+
+async function togglePause() {
+  const url = runtime.keepalive_paused ? '/api/resume' : '/api/pause';
+  await fetch(url, {method:'POST'});
+  fetchStatus();
+}
+
+async function sendAll() {
+  await fetch('/api/sendall', {method:'POST'});
+}
+
+async function publishManual() {
+  const id    = document.getElementById('m-alarm-id').value;
+  const state = document.getElementById('m-alarm-state').value;
+  await fetch('/api/publish', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id, state})
+  });
+}
+
+function flashOK() {
+  document.body.style.transition = 'background .1s';
+  document.body.style.background = '#15294d';
+  setTimeout(() => document.body.style.background = '', 150);
+}
+
+function renderInMsg(m) {
+  const list = document.getElementById('in-list');
+  const div = document.createElement('div');
+  div.className = 'msg in';
+  const decoded = m.decoded ? JSON.stringify(m.decoded, null, 2) :
+                  (m.error ? 'DECRYPT ERROR: ' + m.error : '(binary)');
+  div.innerHTML = `
+    <div class="msg-header">
+      <span>#${m.id} · ${m.topic}</span>
+      <span>${new Date(m.receivedAt).toLocaleTimeString()}</span>
+    </div>
+    <div class="msg-body">${escapeHtml(decoded)}</div>`;
+  list.insertBefore(div, list.firstChild);
+  while (list.children.length > 50) list.removeChild(list.lastChild);
+}
+
+function renderOutMsg(m) {
+  const list = document.getElementById('out-list');
+  const div = document.createElement('div');
+  const type = m.envelope.Type || 'Unknown';
+  div.className = `msg out ${type}`;
+  div.innerHTML = `
+    <div class="msg-header">
+      <span><span class="badge ${type}">${type}</span> · ${m.topic}</span>
+      <span>${new Date(m.sentAt).toLocaleTimeString()}</span>
+    </div>
+    <div class="msg-body">${escapeHtml(JSON.stringify(m.envelope, null, 2))}</div>`;
+  list.insertBefore(div, list.firstChild);
+  while (list.children.length > 50) list.removeChild(list.lastChild);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+
+async function fetchAlarms() {
+  try {
+    const r = await fetch('/api/alarms');
+    const rows = await r.json();
+    const tb = document.querySelector('#alarm-table tbody');
+    tb.innerHTML = '';
+    rows.forEach(a => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${a.Id}</td><td class="state-${a.State}">${a.State}</td><td>${a.Timestamp}</td>`;
+      tb.appendChild(tr);
+    });
+  } catch (e) {}
+}
+
+async function loadInitial() {
+  const [rI, rO] = await Promise.all([fetch('/api/received'), fetch('/api/sent')]);
+  const inList = await rI.json(), outList = await rO.json();
+  inList.slice().reverse().forEach(renderInMsg);
+  outList.slice().reverse().forEach(renderOutMsg);
+}
+
+// Countdown until next KA
+setInterval(() => {
+  if (!runtime.keepalive_seconds) return;
+  if (runtime.keepalive_paused) {
+    document.getElementById('next-ka').textContent = 'PAUSED';
+    return;
+  }
+  if (!lastKAtime) {
+    document.getElementById('next-ka').textContent = '—';
+    return;
+  }
+  const elapsed = (Date.now() - lastKAtime.getTime()) / 1000;
+  const remaining = Math.max(0, runtime.keepalive_seconds - elapsed);
+  document.getElementById('next-ka').textContent = remaining.toFixed(1) + 's';
+}, 200);
+
+// SSE stream
+const es = new EventSource('/api/stream');
+es.onmessage = (e) => {
+  try {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'received') renderInMsg(msg.payload);
+    else if (msg.type === 'sent') {
+      renderOutMsg(msg.payload);
+      if (msg.payload.kind === 'KeepAlive') lastKAtime = new Date(msg.payload.sentAt);
+    }
+    else if (msg.type === 'config' || msg.type === 'connection') fetchStatus();
+  } catch (err) { console.error(err); }
+};
+
+// Init
+fetchStatus();
+loadInitial();
+fetchAlarms();
+setInterval(fetchStatus, 3000);
+setInterval(fetchAlarms, 2000);
+</script>
+
+</body>
+</html>
