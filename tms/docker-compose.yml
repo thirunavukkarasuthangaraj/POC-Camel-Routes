@@ -76,7 +76,7 @@ services:
       KAFKA_HOST: kafka
       KAFKA_PORT: "29092"
 
-      # ✅ External VM — tms-node03 (Linux) running external-scada compose
+      # ✅ External VM — tms-node03 / VM2 (10.4.0.25) running external-scada compose
       RABBITMQ_HOST: 10.4.0.25
       RABBITMQ_PORT: "5672"
       RABBITMQ_USER: thiru
