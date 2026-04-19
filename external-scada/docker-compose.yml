@@ -22,7 +22,7 @@ services:
     restart: unless-stopped
     ports:
       - "5672:5672"      # AMQP — bridge on internal VM connects here
-      - "1883:1883"      # MQTT — SCADA API / devices subscribe
+      - "1884:1883"      # MQTT — SCADA API / devices subscribe (1883 taken by haproxy)
       - "15672:15672"    # Management console
       - "15675:15675"    # MQTT over WebSocket (browser SCADA viewer)
     environment:
