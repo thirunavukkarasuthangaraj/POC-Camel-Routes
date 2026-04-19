@@ -89,34 +89,4 @@ public class DecryptExample {
         return new String(plaintext, StandardCharsets.UTF_8);
     }
 
-    // ── Quick test main — verifies encrypt/decrypt round-trip ─────────────
-    public static void main(String[] args) throws Exception {
-
-        // 1. Set a test key (32 bytes)
-        String testKey = Base64.getEncoder().encodeToString(new byte[32]);
-        System.setProperty("SCADA_AES_KEY_TEST", testKey);
-
-        // 2. Simulate a payload from EncryptProcessor
-        String originalJson =
-            "{\"messageType\":\"TMS_PAS_UPDATE\",\"platformPredictions\":[" +
-            "{\"platformId\":\"PL2201\"}]}";
-
-        EncryptProcessor enc = new EncryptProcessor();
-
-        org.apache.camel.impl.DefaultCamelContext ctx =
-                new org.apache.camel.impl.DefaultCamelContext();
-        org.apache.camel.support.DefaultExchange exchange =
-                new org.apache.camel.support.DefaultExchange(ctx);
-        exchange.getIn().setBody(originalJson);
-
-        enc.process(exchange);
-
-        byte[] payload = exchange.getIn().getBody(byte[].class);
-        System.out.println("Encrypted payload length: " + payload.length + " bytes");
-
-        // 3. Decrypt
-        String decrypted = decrypt(payload);
-        System.out.println("Decrypted JSON: " + decrypted);
-        System.out.println("Match: " + originalJson.equals(decrypted));
-    }
 }

@@ -37,16 +37,8 @@ import java.util.List;
 @JacksonXmlRootElement(localName = "rcsMsg")
 public class RcsMsg {
 
-    @JacksonXmlProperty(localName = "hdr")
-    public Hdr hdr;
-
     @JacksonXmlProperty(localName = "data")
     public Data data;
-
-    public static class Hdr {
-        @JacksonXmlProperty(localName = "schema") public String schema;
-        @JacksonXmlProperty(localName = "sender") public String sender;
-    }
 
     public static class Data {
         @JacksonXmlProperty(localName = "PlatformInfos")
@@ -66,10 +58,6 @@ public class RcsMsg {
 
         @JacksonXmlProperty(localName = "StationId")
         public int stationId;
-
-        // Note: typo in real TMS data — "Approacing" not "Approaching"
-        @JacksonXmlProperty(localName = "NextTrainApproacing")
-        public String nextTrainApproaching;
 
         @JacksonXmlProperty(localName = "Trains")
         public Trains trains;
@@ -92,7 +80,6 @@ public class RcsMsg {
         // Train state — child elements
         @JacksonXmlProperty(localName = "WillStop")      public String willStop;
         @JacksonXmlProperty(localName = "AtStation")     public String atStation;
-        @JacksonXmlProperty(localName = "LastForToday")  public String lastForToday;
         @JacksonXmlProperty(localName = "ArrivalTime")   public String arrivalTime;
         @JacksonXmlProperty(localName = "DepartureTime") public String departureTime;
         @JacksonXmlProperty(localName = "DestinationId") public String destinationId;

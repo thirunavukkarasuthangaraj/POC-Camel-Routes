@@ -18,15 +18,6 @@ public class ATRTimeTable {
     @JacksonXmlProperty(localName = "dateTime")
     public String dateTime;
 
-    @JacksonXmlProperty(localName = "StartIndex")
-    public int startIndex;
-
-    @JacksonXmlProperty(localName = "TotalCount")
-    public int totalCount;
-
-    @JacksonXmlProperty(localName = "GraphID")
-    public int graphId;
-
     @JacksonXmlProperty(localName = "Trains")
     public Trains trains;
 
@@ -45,9 +36,6 @@ public class ATRTimeTable {
 
         @JacksonXmlProperty(localName = "TTGUID")
         public String ttGuid;
-
-        @JacksonXmlProperty(localName = "Name")
-        public String name;
 
         @JacksonXmlProperty(localName = "TripNo")
         public int tripNo;

@@ -139,9 +139,8 @@ DEFAULT_EQUIPMENT = [
 runtime["equipment"] = list(DEFAULT_EQUIPMENT)
 
 # Rolling-window rate tracking (60-sec window for msgs/sec calc)
-from collections import deque as _deque
-_rate_window_in  = _deque(maxlen=600)   # timestamps of received msgs
-_rate_window_out = _deque(maxlen=600)   # timestamps of sent msgs
+_rate_window_in  = deque(maxlen=600)   # timestamps of received msgs
+_rate_window_out = deque(maxlen=600)   # timestamps of sent msgs
 
 app = Flask(__name__, static_folder="static")
 mqtt_client: mqtt.Client | None = None
@@ -306,7 +305,7 @@ def publish_get_all_alarms():
     return ok
 
 
-def compute_rate(window: "_deque") -> float:
+def compute_rate(window: "deque") -> float:
     """Messages per second over the last 60s, live computation."""
     now = time.time()
     recent = [t for t in window if now - t <= 60.0]

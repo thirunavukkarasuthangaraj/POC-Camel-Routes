@@ -181,13 +181,9 @@ public class BridgeConfig {
     // ── Inner: Kafka config ───────────────────────────────────────
     public static class Kafka {
         private String topic;
-        private String consumerGroup;
 
         public String getTopic() { return topic; }
         public void setTopic(String topic) { this.topic = topic; }
-
-        public String getConsumerGroup() { return consumerGroup; }
-        public void setConsumerGroup(String consumerGroup) { this.consumerGroup = consumerGroup; }
     }
 
     // ── Inner: Kafka → RabbitMQ route ────────────────────────────
