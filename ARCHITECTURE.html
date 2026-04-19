@@ -3,464 +3,446 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>PAS-SCADA-Kafka-Bridge — Architecture</title>
+<title>PAS-SCADA-Kafka-Bridge &mdash; Architecture</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f1f5f9; color: #1e293b; font-size: 13px; }
-
-  .page-header {
-    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 60%, #0f172a 100%);
-    padding: 28px 32px 24px;
-    border-bottom: 3px solid #3b82f6;
+  body {
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #faf9f6;
+    color: #1f2937;
+    padding: 32px 20px;
+    min-height: 100vh;
   }
-  .page-header h1 { font-size: 22px; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px; }
-  .page-header p  { font-size: 12px; color: #94a3b8; margin-top: 6px; }
-  .badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
-  .badge { font-size: 10px; font-weight: 700; padding: 3px 12px; border-radius: 20px; border: 1px solid transparent; }
-  .b-blue   { background: #1e3a5f; color: #93c5fd; border-color: #3b82f6; }
-  .b-green  { background: #052e16; color: #86efac; border-color: #22c55e; }
-  .b-amber  { background: #451a03; color: #fcd34d; border-color: #f59e0b; }
-  .b-purple { background: #2e1065; color: #c4b5fd; border-color: #8b5cf6; }
-  .b-teal   { background: #042f2e; color: #5eead4; border-color: #14b8a6; }
-  .b-conf   { background: #14b8a6; color: white; border-color: #0d9488; }
 
-  .container { max-width: 1280px; margin: 0 auto; padding: 28px 20px; display: flex; flex-direction: column; gap: 24px; }
+  .page-title {
+    text-align: center;
+    font-size: 24px;
+    font-weight: 600;
+    color: #374151;
+    letter-spacing: -0.3px;
+    margin-bottom: 6px;
+  }
+  .page-sub {
+    text-align: center;
+    font-size: 13px;
+    color: #9ca3af;
+    margin-bottom: 30px;
+  }
 
-  /* ── Zone boxes ── */
+  /* ── Main diagram container ── */
+  .diagram {
+    max-width: 1280px;
+    margin: 0 auto;
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1.3fr 1fr;
+    gap: 28px;
+    align-items: stretch;
+  }
+
+  /* ── Zones ── */
   .zone {
-    border-radius: 12px; padding: 14px 16px 18px;
-    display: flex; flex-direction: column; gap: 12px;
+    border-radius: 18px;
+    padding: 18px 16px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    position: relative;
   }
-  .zone-tms  { border: 2px solid #3b82f6; background: #eff6ff; }
-  .zone-scada{ border: 2px solid #14b8a6; background: #f0fdfa; }
-  .zone-label { font-size: 11px; font-weight: 800; letter-spacing: 1px; text-align: center; padding-bottom: 6px; }
-  .zone-tms   .zone-label { color: #1d4ed8; }
-  .zone-scada .zone-label { color: #0f766e; }
+  .zone-header {
+    padding-bottom: 10px;
+    border-bottom: 1px dashed rgba(0,0,0,.12);
+    margin-bottom: 4px;
+  }
+  .zone-title { font-size: 15px; font-weight: 600; }
+  .zone-sub   { font-size: 10px; font-weight: 500; color: #6b7280; margin-top: 2px; letter-spacing: .3px; }
+
+  .zone-tms    { background: #e8f3f0; border: 1.5px solid #a7d4c7; }
+  .zone-tms   .zone-title { color: #0f5140; }
+  .zone-camel  { background: #ece6f6; border: 1.5px solid #c7b5e8; }
+  .zone-camel .zone-title { color: #4c2d7a; }
+  .zone-scada  { background: #fceee2; border: 1.5px solid #e8c4a0; }
+  .zone-scada .zone-title { color: #8a4a1e; }
 
   /* ── Component cards ── */
-  .comp {
-    border-radius: 8px; overflow: hidden;
-    border: 1.5px solid #e2e8f0;
-    display: flex; flex-direction: column;
-    flex-shrink: 0;
+  .card {
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
-  .comp-head {
-    padding: 7px 10px; font-size: 10px; font-weight: 800;
-    text-align: center; color: white; letter-spacing: .3px;
-  }
-  .comp-body { background: white; padding: 9px 10px; font-size: 8px; line-height: 1.9; color: #475569; }
-  .comp-body .sub { font-size: 7.5px; color: #94a3b8; }
-  .comp-body .tag {
-    display: inline-block; font-size: 7.5px; font-weight: 700;
-    padding: 2px 7px; border-radius: 4px; margin: 2px 0;
-  }
-  .tag-blue   { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
-  .tag-green  { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
-  .tag-amber  { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
-  .tag-purple { background: #f5f3ff; color: #5b21b6; border: 1px solid #ddd6fe; }
-  .tag-teal   { background: #f0fdfa; color: #0f766e; border: 1px solid #99f6e4; }
-  .tag-red    { background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; }
-  .tag-cyan   { background: #ecfeff; color: #0e7490; border: 1px solid #a5f3fc; }
+  .card-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .card-line  { font-size: 10.5px; color: #6b7280; line-height: 1.6; }
 
-  /* ── Row layout ── */
-  .row { display: flex; align-items: flex-start; gap: 0; min-width: 1100px; overflow-x: auto; }
+  /* ── TMS zone cards ── */
+  .card-device   { background: #d9d9d9; border: 1px solid #b8b8b8; }
+  .card-device   .card-title { color: #3f3f46; }
+  .card-artemis  { background: #c7dcf0; border: 1px solid #8cb5dc; }
+  .card-artemis  .card-title { color: #1e40af; }
+  .card-kafka    { background: #b8e1ce; border: 1px solid #6db495; }
+  .card-kafka    .card-title { color: #065f46; }
 
-  /* ── Arrows ── */
-  .arr-col { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28px 8px 0; flex-shrink: 0; gap: 5px; }
-  .arr-label { font-size: 7px; font-weight: 700; white-space: nowrap; }
-
-  /* ── Connector between zones ── */
-  .connector {
-    display: flex; align-items: center; justify-content: center;
-    padding: 8px 0; gap: 32px;
+  /* ── Route cards (middle zone) ── */
+  .route {
+    border-radius: 10px;
+    padding: 13px 16px;
+    text-align: center;
+    position: relative;
   }
-  .conn-line { display: flex; flex-direction: column; gap: 5px; align-items: center; }
-  .conn-badge {
-    font-size: 8px; font-weight: 800; padding: 2px 10px; border-radius: 12px;
-    white-space: nowrap;
+  .route-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .route-code  {
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 10.5px;
+    color: #4b5563;
+    line-height: 1.7;
+    font-style: italic;
   }
 
-  /* ── Flow bar ── */
-  .flow-section {
-    background: white; border-radius: 12px; overflow: hidden;
-    box-shadow: 0 1px 4px rgba(0,0,0,.07); border: 1px solid #e2e8f0;
-  }
-  .flow-title {
-    background: linear-gradient(90deg, #0f172a, #1e3a5f);
-    color: #f8fafc; font-size: 11px; font-weight: 700;
-    padding: 10px 18px; letter-spacing: .5px;
-    display: flex; align-items: center; gap: 10px;
-  }
-  .flow-title .ftag {
-    background: #3b82f6; color: white; font-size: 9px;
-    padding: 1px 8px; border-radius: 10px; font-weight: 800;
-  }
-  .flow-body { padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; }
-  .flow-row  { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
-  .fl-label  { font-size: 9px; font-weight: 800; letter-spacing: .3px; margin-right: 2px; white-space: nowrap; }
-  .fn { font-size: 9px; font-weight: 700; padding: 3px 10px; border-radius: 12px; white-space: nowrap; }
-  .fn-blue   { background: #1d4ed8; color: white; }
-  .fn-indigo { background: #4338ca; color: #e0e7ff; }
-  .fn-amber  { background: #b45309; color: #fef3c7; }
-  .fn-green  { background: #15803d; color: #dcfce7; }
-  .fn-teal   { background: #0f766e; color: #ccfbf1; }
-  .fn-purple { background: #6d28d9; color: #ede9fe; }
-  .fn-cyan   { background: #0e7490; color: #cffafe; }
-  .fn-arr    { color: #94a3b8; font-size: 11px; }
+  .route-out { background: #d4c9ec; border: 1px solid #b19ad8; }
+  .route-out .route-title { color: #4a1e8f; }
+  .route-in  { background: #f5c2a4; border: 1px solid #e19765; }
+  .route-in  .route-title { color: #9c3d0d; }
 
-  /* ── Config strip ── */
-  .config-strip {
-    background: #0f172a; border-radius: 12px; padding: 16px 20px;
-    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px;
+  /* ── Inbound divider ── */
+  .inbound-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 0 2px;
+    font-size: 11px;
+    color: #6b7280;
+    font-style: italic;
   }
-  .cfg-box { background: #1e293b; border-radius: 8px; padding: 10px 14px; border: 1px solid #334155; }
-  .cfg-box .cfg-title { font-size: 9px; font-weight: 800; color: #94a3b8; letter-spacing: .5px; margin-bottom: 8px; text-transform: uppercase; }
-  .cfg-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-  .cfg-key { font-size: 8.5px; color: #64748b; }
-  .cfg-val { font-size: 8.5px; font-weight: 700; color: #38bdf8; font-family: monospace; }
+  .inbound-divider::before,
+  .inbound-divider::after {
+    content: '';
+    flex: 1;
+    height: 0;
+    border-top: 1.5px dashed #b4a3d4;
+  }
 
-  .footer { text-align: center; font-size: 10px; color: #94a3b8; padding: 16px; background: white; border-top: 1px solid #e2e8f0; border-radius: 0 0 12px 12px; }
+  /* ── SCADA zone cards ── */
+  .card-exchange { background: #f5c2a4; border: 1px solid #dc9563; }
+  .card-exchange .card-title { color: #a34514; }
+  .card-queue    { background: #f7cdb0; border: 1px solid #d69e72; }
+  .card-queue    .card-title { color: #a34514; }
+  .card-external { background: #d9d9d9; border: 1px solid #b8b8b8; }
+  .card-external .card-title { color: #3f3f46; }
+
+  /* ── Format labels on edges ── */
+  .fmt {
+    position: absolute;
+    font-size: 11px;
+    font-weight: 600;
+    font-style: italic;
+    pointer-events: none;
+  }
+  .fmt-xml  { color: #1e40af; }
+  .fmt-json { color: #4a1e8f; }
+  .fmt-in   { color: #9c3d0d; }
+
+  /* ── Bottom info row ── */
+  .info-row {
+    max-width: 1280px;
+    margin: 20px auto 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.3fr 1fr;
+    gap: 14px;
+    align-items: stretch;
+  }
+  .info-card {
+    border-radius: 10px;
+    padding: 12px 14px;
+    text-align: center;
+    background: white;
+    border: 1px solid #e5e7eb;
+  }
+  .info-card .ic-title { font-size: 11.5px; font-weight: 600; color: #374151; margin-bottom: 4px; }
+  .info-card .ic-line  { font-size: 10px; color: #6b7280; line-height: 1.6; }
+  .info-dlq     { background: #f5f5f5; }
+  .info-health  { background: #dce9c9; border-color: #a7bf85; }
+  .info-health .ic-title { color: #3f6212; }
+  .info-k8s     { background: #ffffff; }
+  .info-runtime { background: #e2dcf5; border-color: #b4a3d4; }
+  .info-runtime .ic-title { color: #4c2d7a; }
+
+  /* ── Legend ── */
+  .legend {
+    max-width: 1280px;
+    margin: 20px auto 0;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 14px 18px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: center;
+  }
+  .legend-title { font-size: 12px; font-weight: 600; color: #374151; margin-right: 8px; align-self: center; }
+  .legend-item  { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #4b5563; }
+  .leg-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+  .leg-xml      { background: #1e40af; }
+  .leg-xml-ret  { background: #f97316; }
+  .leg-json-out { background: #7c3aed; }
+  .leg-json-in  { background: #c2410c; }
+
+  /* ── Decorative connecting arrows ── */
+  .conn-layer {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .conn-layer svg { width: 100%; height: 100%; overflow: visible; }
+
+  /* ── Edge arrows (simple visual indicators within zones) ── */
+  .edge-arrows {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 0 4px;
+    font-size: 10px;
+    color: #6b7280;
+  }
+  .edge-arrows .ea-line {
+    display: flex; align-items: center; gap: 6px;
+    padding: 3px 6px;
+    background: rgba(255,255,255,.6);
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .footer {
+    max-width: 1280px;
+    margin: 24px auto 0;
+    text-align: center;
+    font-size: 10.5px;
+    color: #9ca3af;
+  }
+
+  @media (max-width: 1100px) {
+    .diagram { grid-template-columns: 1fr; }
+    .info-row { grid-template-columns: 1fr 1fr; }
+  }
 </style>
 </head>
 <body>
 
-<!-- PAGE HEADER -->
-<div class="page-header">
-  <h1>PAS-SCADA-Kafka-Bridge &mdash; System Architecture</h1>
-  <p>Bidirectional TMS ↔ SCADA integration &nbsp;·&nbsp; Spring Boot + Apache Camel &nbsp;·&nbsp; AES-256-GCM encrypted</p>
-  <div class="badges">
-    <span class="badge b-conf">IMPLEMENTED</span>
-    <span class="badge b-blue">ActiveMQ Artemis &nbsp;10.4.0.23:61616</span>
-    <span class="badge b-teal">Apache Kafka &nbsp;10.4.0.23:9092</span>
-    <span class="badge b-purple">RabbitMQ &nbsp;10.4.0.25:5673</span>
-    <span class="badge b-teal">MQTT &nbsp;10.4.0.25:1884</span>
-    <span class="badge b-amber">AES-256-GCM Encryption</span>
-    <span class="badge b-green">SCADA API (Flask) &nbsp;:8091</span>
-  </div>
-</div>
+<div class="page-title">PAS-SCADA-Kafka-Bridge &mdash; Architecture</div>
+<div class="page-sub">Bidirectional TMS &harr; SCADA integration &middot; One Spring Boot JAR &middot; One Docker image &middot; One K8s Deployment</div>
 
-<div class="container">
+<!-- ══ MAIN DIAGRAM ══ -->
+<div class="diagram">
 
-  <!-- ══ MAIN DIAGRAM ══ -->
-  <div style="background:white;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);border:1px solid #e2e8f0;">
-    <div style="background:linear-gradient(90deg,#0f172a,#1e3a5f);color:#f8fafc;font-size:12px;font-weight:700;padding:10px 18px;display:flex;align-items:center;gap:10px;">
-      <span style="background:#3b82f6;color:white;font-size:9px;padding:1px 8px;border-radius:10px;font-weight:800;">ARCHITECTURE</span>
-      Bidirectional Flow &mdash; TMS VM (10.4.0.23) ↔ SCADA VM (10.4.0.25)
+  <!-- ═══════════ LEFT ZONE — TMS VM ═══════════ -->
+  <div class="zone zone-tms">
+    <div class="zone-header">
+      <div class="zone-title">TMS VM</div>
+      <div class="zone-sub">TMS-VM-INTERNAL &middot; 10.4.0.23</div>
     </div>
-    <div style="padding:20px;background:#f8fafc;">
-    <div style="display:flex;flex-direction:column;gap:0;min-width:1100px;overflow-x:auto;">
 
-      <!-- ══ TMS VM ZONE ══ -->
-      <div class="zone zone-tms">
-        <div class="zone-label">TMS VM &nbsp;·&nbsp; 10.4.0.23 &nbsp;·&nbsp; Bridge &nbsp;+&nbsp; Kafka &nbsp;+&nbsp; Zookeeper &nbsp;+&nbsp; Kafdrop</div>
-        <div class="row">
-
-          <!-- TMS Server -->
-          <div class="comp" style="width:130px;border-color:#bfdbfe;">
-            <div class="comp-head" style="background:#2563eb;">TMS Server</div>
-            <div class="comp-body">
-              <div class="sub">10.4.0.23</div>
-              <hr style="border:none;border-top:1px solid #f1f5f9;margin:5px 0"/>
-              <div><span class="tag tag-blue">TMS.PISInfo</span></div>
-              <div><span class="tag tag-blue">TrafficReportClient</span></div>
-              <div><span class="tag tag-blue">TSInfo</span></div>
-              <div><span class="tag tag-blue">RouteInfo</span></div>
-              <hr style="border:none;border-top:1px solid #fde68a;margin:5px 0"/>
-              <div style="color:#92400e;font-weight:700;">← SCADA.TMS.Alarms</div>
-              <div class="sub">receives RSAE JSON/XML</div>
-            </div>
-          </div>
-
-          <!-- Arrow TMS ↔ Artemis -->
-          <div class="arr-col">
-            <span class="arr-label" style="color:#3b82f6;">XML pub →</span>
-            <svg width="28" height="10"><line x1="0" y1="5" x2="24" y2="5" stroke="#3b82f6" stroke-width="1.5"/><polygon points="20,2 28,5 20,8" fill="#3b82f6"/></svg>
-            <svg width="28" height="10"><line x1="28" y1="5" x2="4" y2="5" stroke="#f59e0b" stroke-width="1.5"/><polygon points="8,2 0,5 8,8" fill="#f59e0b"/></svg>
-            <span class="arr-label" style="color:#f59e0b;">← RSAE reply</span>
-          </div>
-
-          <!-- ActiveMQ Artemis -->
-          <div class="comp" style="width:152px;border-color:#bfdbfe;">
-            <div class="comp-head" style="background:#1d4ed8;">ActiveMQ Artemis</div>
-            <div class="comp-body">
-              <div class="sub">OpenWire :61616</div>
-              <hr style="border:none;border-top:1px solid #f1f5f9;margin:5px 0"/>
-              <div style="font-weight:700;color:#1d4ed8;font-size:8px;margin-bottom:3px;">OUTBOUND topics:</div>
-              <div><span class="tag tag-blue">TMS.PISInfo</span></div>
-              <div><span class="tag tag-blue">TrafficReportClient</span></div>
-              <div><span class="tag tag-blue">TSInfo · RouteInfo</span></div>
-              <hr style="border:none;border-top:1px solid #fde68a;margin:5px 0"/>
-              <div style="font-weight:700;color:#92400e;font-size:8px;margin-bottom:3px;">INBOUND topic:</div>
-              <div><span class="tag tag-amber">SCADA.TMS.Alarms</span></div>
-              <div class="sub">bridge publishes RSAE here</div>
-            </div>
-          </div>
-
-          <!-- Arrow Artemis → Bridge -->
-          <div class="arr-col">
-            <span class="arr-label" style="color:#6366f1;">subscribe →</span>
-            <svg width="28" height="10"><line x1="0" y1="5" x2="24" y2="5" stroke="#6366f1" stroke-width="1.5"/><polygon points="20,2 28,5 20,8" fill="#6366f1"/></svg>
-            <svg width="28" height="10"><line x1="28" y1="5" x2="4" y2="5" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="3,2"/><polygon points="8,2 0,5 8,8" fill="#f59e0b"/></svg>
-            <span class="arr-label" style="color:#f59e0b;">← publish</span>
-          </div>
-
-          <!-- Bridge App — KafkaBridgeRoutes -->
-          <div class="comp" style="width:185px;border-color:#c7d2fe;">
-            <div class="comp-head" style="background:#4f46e5;">
-              KafkaBridgeRoutes
-              <div style="font-size:7px;font-weight:400;opacity:.85;margin-top:1px;">Spring Boot + Apache Camel</div>
-            </div>
-            <div class="comp-body">
-              <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:4px;padding:4px 7px;margin-bottom:5px;">
-                <div style="color:#4338ca;font-weight:700;font-size:8px;margin-bottom:3px;">▼ OUTBOUND (per Artemis topic)</div>
-                <div><span class="tag tag-blue">from( artemis:topic )</span></div>
-                <div style="color:#94a3b8;font-size:7.5px;text-align:center;">↓</div>
-                <div><span class="tag tag-amber">XmlToJsonProcessor</span></div>
-                <div style="color:#94a3b8;font-size:7.5px;text-align:center;">↓</div>
-                <div><span class="tag tag-amber">EncryptProcessor (AES-256-GCM)</span></div>
-                <div style="color:#94a3b8;font-size:7.5px;text-align:center;">↓ pipeline: kafka → rabbitmq → mqtt</div>
-              </div>
-              <div style="background:#fefce8;border:1px solid #fde68a;border-radius:4px;padding:4px 7px;">
-                <div style="color:#92400e;font-weight:700;font-size:8px;margin-bottom:3px;">▲ INBOUND (SCADA → TMS)</div>
-                <div><span class="tag tag-amber">from( scada.tms.alarms.queue )</span></div>
-                <div style="color:#94a3b8;font-size:7.5px;text-align:center;">↓</div>
-                <div><span class="tag tag-amber">ScadaInboundProcessor</span></div>
-                <div style="color:#94a3b8;font-size:7.5px;text-align:center;">↓ [opt: JsonToXmlProcessor]</div>
-                <div><span class="tag tag-amber">to( artemis:SCADA.TMS.Alarms )</span></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Arrow Bridge → Kafka -->
-          <div class="arr-col">
-            <span class="arr-label" style="color:#0d9488;">byte[] →</span>
-            <svg width="28" height="10"><line x1="0" y1="5" x2="24" y2="5" stroke="#0d9488" stroke-width="1.5"/><polygon points="20,2 28,5 20,8" fill="#0d9488"/></svg>
-          </div>
-
-          <!-- Apache Kafka -->
-          <div class="comp" style="width:126px;border-color:#99f6e4;">
-            <div class="comp-head" style="background:#0d9488;">Apache Kafka</div>
-            <div class="comp-body">
-              <div class="sub">:9092 &nbsp;·&nbsp; Kafdrop :9000</div>
-              <hr style="border:none;border-top:1px solid #f1f5f9;margin:5px 0"/>
-              <div style="font-size:11px;font-weight:800;color:#0f766e;line-height:1.3;margin-bottom:5px;">tms.scada<br/>.encrypted</div>
-              <div class="sub">7-day retention</div>
-              <div class="sub">byte[] payload</div>
-              <hr style="border:none;border-top:1px solid #f1f5f9;margin:5px 0"/>
-              <div><span class="tag tag-teal">Zookeeper :2181</span></div>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- ══ CONNECTOR BETWEEN ZONES ══ -->
-      <div class="connector">
-        <div class="conn-line">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span class="conn-badge" style="background:#4f46e5;color:#e0e7ff;">AMQP &nbsp;5673</span>
-            <div>
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
-                <span style="font-size:7px;font-weight:700;color:#6366f1;">publish encrypted →</span>
-                <svg width="50" height="10"><line x1="0" y1="5" x2="46" y2="5" stroke="#6366f1" stroke-width="2" stroke-dasharray="4,3"/><polygon points="42,2 50,5 42,8" fill="#6366f1"/></svg>
-              </div>
-              <div style="display:flex;align-items:center;gap:6px;">
-                <svg width="50" height="10"><line x1="50" y1="5" x2="4" y2="5" stroke="#f59e0b" stroke-width="2" stroke-dasharray="4,3"/><polygon points="8,2 0,5 8,8" fill="#f59e0b"/></svg>
-                <span style="font-size:7px;font-weight:700;color:#f59e0b;">← RSAE JSON inbound</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="conn-line">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span class="conn-badge" style="background:#0e7490;color:#cffafe;">MQTT &nbsp;1884</span>
-            <div>
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
-                <span style="font-size:7px;font-weight:700;color:#0891b2;">→ tms/scada/pas</span>
-                <svg width="50" height="10"><line x1="0" y1="5" x2="46" y2="5" stroke="#0891b2" stroke-width="2" stroke-dasharray="4,3"/><polygon points="42,2 50,5 42,8" fill="#0891b2"/></svg>
-              </div>
-              <div style="display:flex;align-items:center;gap:6px;">
-                <svg width="50" height="10"><line x1="50" y1="5" x2="4" y2="5" stroke="#d97706" stroke-width="2" stroke-dasharray="4,3"/><polygon points="8,2 0,5 8,8" fill="#d97706"/></svg>
-                <span style="font-size:7px;font-weight:700;color:#d97706;">← scada/tms/alarms</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ══ SCADA VM ZONE ══ -->
-      <div class="zone zone-scada">
-        <div class="zone-label">SCADA VM &nbsp;·&nbsp; 10.4.0.25 &nbsp;·&nbsp; RabbitMQ &nbsp;+&nbsp; SCADA API</div>
-        <div class="row">
-
-          <!-- RabbitMQ -->
-          <div class="comp" style="width:230px;border-color:#ddd6fe;">
-            <div class="comp-head" style="background:#7c3aed;">RabbitMQ Broker</div>
-            <div class="comp-body">
-              <div class="sub">AMQP :5673 (host) → :5672 (container)</div>
-              <div class="sub">MQTT :1884 (host) → :1883 (container)</div>
-              <div class="sub">Management :15672</div>
-              <hr style="border:none;border-top:1px solid #f1f5f9;margin:5px 0"/>
-              <div style="font-weight:700;color:#5b21b6;font-size:8px;margin-bottom:3px;">Exchange: amq.topic</div>
-              <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:4px;padding:4px 7px;margin-bottom:4px;">
-                <div style="color:#5b21b6;font-weight:700;font-size:7.5px;">TMS → SCADA (outbound)</div>
-                <div class="sub">key: tms.scada.pas</div>
-                <div class="sub">MQTT topic: tms/scada/pas</div>
-              </div>
-              <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:4px 7px;">
-                <div style="color:#92400e;font-weight:700;font-size:7.5px;">SCADA → TMS (inbound)</div>
-                <div class="sub">MQTT topic: scada/tms/alarms</div>
-                <div class="sub">queue: scada.tms.alarms.queue</div>
-                <div class="sub">key: scada.tms.alarms</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Arrow RabbitMQ ↔ SCADA API -->
-          <div class="arr-col">
-            <span class="arr-label" style="color:#0891b2;">MQTT →</span>
-            <svg width="28" height="10"><line x1="0" y1="5" x2="24" y2="5" stroke="#0891b2" stroke-width="1.5"/><polygon points="20,2 28,5 20,8" fill="#0891b2"/></svg>
-            <svg width="28" height="10"><line x1="28" y1="5" x2="4" y2="5" stroke="#d97706" stroke-width="1.5"/><polygon points="8,2 0,5 8,8" fill="#d97706"/></svg>
-            <span class="arr-label" style="color:#d97706;">← publish</span>
-          </div>
-
-          <!-- SCADA API -->
-          <div class="comp" style="flex:1;border-color:#a5f3fc;">
-            <div class="comp-head" style="background:#0891b2;">SCADA API &nbsp;(Python Flask)</div>
-            <div class="comp-body">
-              <div class="sub">HTTP :8091 &nbsp;·&nbsp; NodePort :30891</div>
-              <hr style="border:none;border-top:1px solid #f1f5f9;margin:5px 0"/>
-              <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                <div style="flex:1;background:#ecfeff;border:1px solid #a5f3fc;border-radius:5px;padding:7px 10px;min-width:180px;">
-                  <div style="font-size:8px;font-weight:700;color:#0e7490;margin-bottom:4px;">▼ RECEIVES — TMS → SCADA</div>
-                  <div><span class="tag tag-cyan">SUB: tms/scada/pas</span></div>
-                  <div><span class="tag tag-cyan">AES-256-GCM decrypt</span></div>
-                  <div><span class="tag tag-cyan">Display JSON payload</span></div>
-                  <hr style="border:none;border-top:1px solid #cffafe;margin:5px 0"/>
-                  <div class="sub">Dashboard: /</div>
-                  <div class="sub">Messages:  /messages</div>
-                  <div class="sub">Live SSE:  /api/stream</div>
-                </div>
-                <div style="flex:1;background:#fffbeb;border:1px solid #fde68a;border-radius:5px;padding:7px 10px;min-width:180px;">
-                  <div style="font-size:8px;font-weight:700;color:#92400e;margin-bottom:4px;">▲ SENDS — SCADA → TMS (RSAE)</div>
-                  <div><span class="tag tag-amber">PUB: scada/tms/alarms</span></div>
-                  <hr style="border:none;border-top:1px solid #fde68a;margin:5px 0"/>
-                  <div><span class="tag tag-amber">UpdateAlarm &nbsp;(every 10s)</span></div>
-                  <div><span class="tag tag-amber">KeepAlive &nbsp;(every 30s)</span></div>
-                  <div><span class="tag tag-amber">SendAllAlarms &nbsp;(every 60s)</span></div>
-                  <div><span class="tag tag-amber">GetAllAlarms &nbsp;(every 120s)</span></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
+    <div class="card card-device">
+      <div class="card-title">TMS Server</div>
+      <div class="card-line">publishes XML messages</div>
     </div>
+
+    <div style="display:flex;justify-content:center;color:#6b7280;font-size:11px;font-weight:600;margin:-4px 0;">XML &darr;</div>
+
+    <div class="card card-artemis">
+      <div class="card-title">ActiveMQ Artemis</div>
+      <div class="card-line">command plane &middot; OpenWire/AMQP</div>
+      <div class="card-line">port 61616 &middot; format: XML</div>
+      <div class="card-line" style="margin-top:6px;color:#1e40af;font-weight:600;">out: TMS.PISInfo &middot; TrafficReportClient</div>
+      <div class="card-line" style="color:#1e40af;font-weight:600;">out: TSInfo &middot; RouteInfo</div>
+      <div class="card-line" style="color:#9c3d0d;font-weight:600;margin-top:4px;">in:  SCADA.TMS.Alarms</div>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <div class="card card-kafka">
+      <div class="card-title">Apache Kafka</div>
+      <div class="card-line">tms.scada.encrypted</div>
+      <div class="card-line">port 9092 &middot; format: byte[] (AES-GCM)</div>
+      <div class="card-line" style="margin-top:4px;">Zookeeper :2181 &middot; Kafdrop :9000</div>
     </div>
   </div>
 
-  <!-- ══ FLOW BAR ══ -->
-  <div class="flow-section">
-    <div class="flow-title">
-      <span class="ftag">FLOW</span>
-      Message Paths — Both Directions
+  <!-- ═══════════ MIDDLE ZONE — APACHE CAMEL BRIDGE POD ═══════════ -->
+  <div class="zone zone-camel">
+    <div class="zone-header" style="text-align:center;">
+      <div class="zone-title">Apache Camel (Spring Boot Pod)</div>
+      <div class="zone-sub">One JAR &middot; One Docker image &middot; One K8s Deployment</div>
     </div>
-    <div class="flow-body">
 
-      <div class="flow-row">
-        <span class="fl-label" style="color:#3b82f6;">▼ TMS → SCADA:</span>
-        <span class="fn fn-blue">TMS Server</span><span class="fn-arr">→</span>
-        <span class="fn fn-blue">Artemis :61616</span><span class="fn-arr">→</span>
-        <span class="fn fn-indigo">Camel: from(artemis:topic)</span><span class="fn-arr">→</span>
-        <span class="fn fn-amber">XmlToJsonProcessor</span><span class="fn-arr">→</span>
-        <span class="fn fn-amber">🔒 AES-256-GCM</span><span class="fn-arr">→</span>
-        <span class="fn fn-teal">Kafka: tms.scada.encrypted</span><span class="fn-arr">→</span>
-        <span class="fn fn-purple">RabbitMQ: amq.topic / tms.scada.pas</span><span class="fn-arr">→</span>
-        <span class="fn fn-cyan">MQTT: tms/scada/pas :1884</span><span class="fn-arr">→</span>
-        <span class="fn fn-cyan">SCADA API 🔓 decrypt → JSON ✓</span>
+    <!-- ── OUTBOUND: Route 1 ── -->
+    <div class="route route-out">
+      <div class="route-title">Route 1 &mdash; Artemis &rarr; Kafka</div>
+      <div class="route-code">
+        from("activemq:topic:TMS.PISInfo")<br/>
+        .process(XmlToJsonProcessor)<br/>
+        .process(EncryptProcessor)  <span style="color:#4a1e8f;font-style:normal;">// AES-256-GCM</span><br/>
+        .to("kafka:tms.scada.encrypted")
       </div>
+    </div>
 
-      <div class="flow-row">
-        <span class="fl-label" style="color:#f59e0b;">▲ SCADA → TMS:</span>
-        <span class="fn fn-cyan">SCADA API</span><span class="fn-arr">→</span>
-        <span class="fn fn-cyan">MQTT PUB: scada/tms/alarms :1884</span><span class="fn-arr">→</span>
-        <span class="fn fn-purple">RabbitMQ MQTT plugin</span><span class="fn-arr">→</span>
-        <span class="fn fn-purple">Queue: scada.tms.alarms.queue</span><span class="fn-arr">→</span>
-        <span class="fn fn-indigo">Camel: ScadaInboundProcessor</span><span class="fn-arr">→</span>
-        <span class="fn" style="background:#92400e;color:#fef3c7;">[opt] JsonToXmlProcessor</span><span class="fn-arr">→</span>
-        <span class="fn fn-blue">Artemis: SCADA.TMS.Alarms</span><span class="fn-arr">→</span>
-        <span class="fn fn-blue">TMS Server</span>
+    <!-- ── OUTBOUND: Route 2 ── -->
+    <div class="route route-out">
+      <div class="route-title">Route 2 &mdash; SINK &mdash; Kafka &rarr; RabbitMQ &rarr; MQTT</div>
+      <div class="route-code">
+        from("kafka:tms.scada.encrypted?groupId=pas-bridge")<br/>
+        .to("spring-rabbitmq:amq.topic?routingKey=tms.scada.pas")<br/>
+        .to("paho:tms/scada/pas?brokerUrl=tcp://10.4.0.25:1884")
       </div>
+    </div>
 
+    <!-- ── INBOUND DIVIDER ── -->
+    <div class="inbound-divider">inbound / source direction</div>
+
+    <!-- ── INBOUND: Route 3 ── -->
+    <div class="route route-in">
+      <div class="route-title">Route 3 &mdash; SOURCE &mdash; RabbitMQ &rarr; Camel</div>
+      <div class="route-code">
+        from("spring-rabbitmq:amq.topic<br/>
+        &nbsp;&nbsp;&nbsp;?queues=scada.tms.alarms.queue<br/>
+        &nbsp;&nbsp;&nbsp;&amp;routingKey=scada.tms.alarms")<br/>
+        .process(ScadaInboundProcessor)  <span style="color:#9c3d0d;font-style:normal;">// log RSAE type</span>
+      </div>
+    </div>
+
+    <!-- ── INBOUND: Route 4 ── -->
+    <div class="route route-in">
+      <div class="route-title">Route 4 &mdash; Camel &rarr; Artemis (return)</div>
+      <div class="route-code">
+        <span style="color:#9c3d0d;font-style:normal;">// optional config flag: bridge.inbound[0].convert-to-xml</span><br/>
+        .process(JsonToXmlProcessor)  <span style="color:#9c3d0d;font-style:normal;">// only if true</span><br/>
+        .to("activemq:topic:SCADA.TMS.Alarms")
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════ RIGHT ZONE — SCADA VM ═══════════ -->
+  <div class="zone zone-scada">
+    <div class="zone-header">
+      <div class="zone-title">SCADA VM</div>
+      <div class="zone-sub">SCADA-VM-EXTERNAL &middot; 10.4.0.25</div>
+    </div>
+
+    <div class="card card-exchange">
+      <div class="card-title">RabbitMQ exchange</div>
+      <div class="card-line">amq.topic &middot; topic exchange</div>
+      <div class="card-line">AMQP :5673 &middot; MQTT :1884</div>
+      <div class="card-line" style="margin-top:4px;">routing key: tms.scada.pas</div>
+      <div class="card-line">format: byte[] encrypted</div>
+    </div>
+
+    <div class="card card-queue">
+      <div class="card-title">RabbitMQ queue</div>
+      <div class="card-line">scada.tms.alarms.queue</div>
+      <div class="card-line">bound to: scada.tms.alarms</div>
+      <div class="card-line">format: JSON (RSAE)</div>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <div class="card card-external">
+      <div class="card-title">SCADA API (Flask)</div>
+      <div class="card-line">Python &middot; Paho MQTT client</div>
+      <div class="card-line">port 8091 &middot; NodePort 30891</div>
+      <div class="card-line" style="margin-top:4px;color:#0e7490;font-weight:600;">SUB: tms/scada/pas &rarr; decrypt</div>
+      <div class="card-line" style="color:#9c3d0d;font-weight:600;">PUB: scada/tms/alarms</div>
+      <div class="card-line" style="font-size:9.5px;margin-top:3px;">UpdateAlarm (10s) &middot; KeepAlive (30s)</div>
+      <div class="card-line" style="font-size:9.5px;">SendAllAlarms (60s) &middot; GetAllAlarms (120s)</div>
     </div>
   </div>
 
-  <!-- ══ CONFIG REFERENCE ══ -->
-  <div class="config-strip">
-    <div class="cfg-box">
-      <div class="cfg-title">TMS VM &nbsp;— 10.4.0.23</div>
-      <div class="cfg-row"><span class="cfg-key">Artemis</span><span class="cfg-val">:61616 OpenWire</span></div>
-      <div class="cfg-row"><span class="cfg-key">Kafka</span><span class="cfg-val">:9092 PLAINTEXT</span></div>
-      <div class="cfg-row"><span class="cfg-key">Kafdrop UI</span><span class="cfg-val">:9000</span></div>
-      <div class="cfg-row"><span class="cfg-key">Bridge health</span><span class="cfg-val">:8085/actuator</span></div>
-      <div class="cfg-row"><span class="cfg-key">Artemis UI</span><span class="cfg-val">:8161</span></div>
-      <div class="cfg-row"><span class="cfg-key">Pipeline</span><span class="cfg-val">kafka,rabbitmq,mqtt</span></div>
-    </div>
-    <div class="cfg-box">
-      <div class="cfg-title">SCADA VM &nbsp;— 10.4.0.25</div>
-      <div class="cfg-row"><span class="cfg-key">RabbitMQ AMQP</span><span class="cfg-val">:5673 (→5672)</span></div>
-      <div class="cfg-row"><span class="cfg-key">RabbitMQ MQTT</span><span class="cfg-val">:1884 (→1883)</span></div>
-      <div class="cfg-row"><span class="cfg-key">RabbitMQ UI</span><span class="cfg-val">:15672</span></div>
-      <div class="cfg-row"><span class="cfg-key">SCADA API</span><span class="cfg-val">:8091</span></div>
-      <div class="cfg-row"><span class="cfg-key">K8s NodePort</span><span class="cfg-val">:30891</span></div>
-      <div class="cfg-row"><span class="cfg-key">MQTT WebSocket</span><span class="cfg-val">:15675</span></div>
-    </div>
-    <div class="cfg-box">
-      <div class="cfg-title">Bridge Config Flags</div>
-      <div class="cfg-row"><span class="cfg-key">bridge.pipeline</span><span class="cfg-val">kafka,rabbitmq,mqtt</span></div>
-      <div class="cfg-row"><span class="cfg-key">bridge.encrypt.enabled</span><span class="cfg-val">true</span></div>
-      <div class="cfg-row"><span class="cfg-key">inbound[0].queue</span><span class="cfg-val">scada.tms.alarms.queue</span></div>
-      <div class="cfg-row"><span class="cfg-key">inbound[0].to-topic</span><span class="cfg-val">SCADA.TMS.Alarms</span></div>
-      <div class="cfg-row"><span class="cfg-key">inbound[0].convert-to-xml</span><span class="cfg-val">false</span></div>
-      <div class="cfg-row"><span class="cfg-key">SCADA_AES_KEY</span><span class="cfg-val">env var (base64 32B)</span></div>
-    </div>
-  </div>
+  <!-- ═══════════ CONNECTING ARROWS OVERLAY ═══════════ -->
+  <div class="conn-layer">
+    <svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" viewBox="0 0 1280 820">
+      <defs>
+        <marker id="arrXml" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#1e40af"/>
+        </marker>
+        <marker id="arrReturn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#f97316"/>
+        </marker>
+        <marker id="arrJsonOut" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#7c3aed"/>
+        </marker>
+        <marker id="arrJsonIn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#c2410c"/>
+        </marker>
+      </defs>
 
-  <div style="background:white;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;">
-    <div style="background:linear-gradient(90deg,#0f172a,#1e3a5f);color:#f8fafc;font-size:11px;font-weight:700;padding:10px 18px;display:flex;align-items:center;gap:10px;">
-      <span style="background:#22c55e;color:white;font-size:9px;padding:1px 8px;border-radius:10px;font-weight:800;">RSAE</span>
-      SCADA → TMS Message Types (4 types, all auto-firing)
-    </div>
-    <div style="padding:14px 18px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;">
-      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;">
-        <div style="font-size:10px;font-weight:800;color:#92400e;margin-bottom:4px;">UpdateAlarm</div>
-        <div style="font-size:8.5px;color:#78350f;">Equipment state change</div>
-        <div style="font-size:8px;color:#b45309;margin-top:4px;font-weight:700;">Every 10s (auto)</div>
-      </div>
-      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;">
-        <div style="font-size:10px;font-weight:800;color:#15803d;margin-bottom:4px;">KeepAlive</div>
-        <div style="font-size:8.5px;color:#166534;">Heartbeat ping</div>
-        <div style="font-size:8px;color:#15803d;margin-top:4px;font-weight:700;">Every 30s (auto)</div>
-      </div>
-      <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:10px 12px;">
-        <div style="font-size:10px;font-weight:800;color:#5b21b6;margin-bottom:4px;">SendAllAlarms</div>
-        <div style="font-size:8.5px;color:#4c1d95;">Full alarm broadcast</div>
-        <div style="font-size:8px;color:#6d28d9;margin-top:4px;font-weight:700;">Every 60s (auto)</div>
-      </div>
-      <div style="background:#ecfeff;border:1px solid #a5f3fc;border-radius:8px;padding:10px 12px;">
-        <div style="font-size:10px;font-weight:800;color:#0e7490;margin-bottom:4px;">GetAllAlarms</div>
-        <div style="font-size:8.5px;color:#155e75;">Request TMS alarm state</div>
-        <div style="font-size:8px;color:#0891b2;margin-top:4px;font-weight:700;">Every 120s (auto)</div>
-      </div>
-    </div>
-  </div>
+      <!-- XML: Artemis → Route 1 -->
+      <line x1="290" y1="200" x2="470" y2="170" stroke="#1e40af" stroke-width="2" marker-end="url(#arrXml)"/>
+      <text x="360" y="175" font-size="13" font-style="italic" fill="#1e40af" font-weight="600">XML</text>
 
-  <div class="footer">
-    PAS-SCADA-Kafka-Bridge &nbsp;·&nbsp; Spring Boot 3.2 · Apache Camel 4.4 · Java 17 · Python Flask &nbsp;·&nbsp; Pink Line TMS Project
+      <!-- JSON/byte[]: Route 1 → Kafka -->
+      <line x1="470" y1="215" x2="290" y2="530" stroke="#7c3aed" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arrJsonOut)"/>
+      <text x="355" y="360" font-size="12" font-style="italic" fill="#7c3aed" font-weight="600">byte[]</text>
+
+      <!-- Kafka → Route 2 -->
+      <line x1="290" y1="540" x2="470" y2="295" stroke="#7c3aed" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arrJsonOut)"/>
+
+      <!-- Route 2 → RabbitMQ exchange (SCADA side) -->
+      <line x1="810" y1="275" x2="1000" y2="200" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrJsonOut)"/>
+      <text x="880" y="220" font-size="13" font-style="italic" fill="#7c3aed" font-weight="600">JSON / MQTT</text>
+
+      <!-- SCADA API → RabbitMQ queue (inbound, JSON) -->
+      <line x1="1000" y1="290" x2="1000" y2="570" stroke="#c2410c" stroke-width="2" stroke-dasharray="4,3"/>
+      <line x1="1000" y1="570" x2="1000" y2="305" stroke="#c2410c" stroke-width="2" marker-end="url(#arrJsonIn)"/>
+      <text x="1010" y="430" font-size="12" font-style="italic" fill="#c2410c" font-weight="600">RSAE JSON</text>
+
+      <!-- RabbitMQ queue → Route 3 -->
+      <line x1="990" y1="305" x2="810" y2="500" stroke="#c2410c" stroke-width="2" marker-end="url(#arrJsonIn)"/>
+
+      <!-- Route 4 → Artemis (return XML) -->
+      <line x1="470" y1="620" x2="290" y2="230" stroke="#f97316" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arrReturn)"/>
+      <text x="340" y="450" font-size="12" font-style="italic" fill="#f97316" font-weight="600">return to Artemis</text>
+    </svg>
   </div>
 
 </div>
+
+<!-- ══ BOTTOM INFO ROW ══ -->
+<div class="info-row">
+  <div class="info-card info-dlq">
+    <div class="ic-title">Dead Letter Queue</div>
+    <div class="ic-line">3 retries &middot; 2s delay</div>
+    <div class="ic-line">then DLQ.kafka-bridge</div>
+  </div>
+  <div class="info-card info-health">
+    <div class="ic-title">Spring Boot health</div>
+    <div class="ic-line">/actuator/health</div>
+    <div class="ic-line">/actuator/camelroutes</div>
+  </div>
+  <div class="info-card info-k8s">
+    <div class="ic-title">Kubernetes &middot; replicas: 1 &rarr; 3 max</div>
+    <div class="ic-line">HPA scales on Kafka consumer lag</div>
+    <div class="ic-line">Bridge :8085 &middot; SCADA API NodePort :30891</div>
+  </div>
+  <div class="info-card info-runtime">
+    <div class="ic-title">Spring Boot 3.2 runtime</div>
+    <div class="ic-line">Java 17 &middot; Camel 4.4</div>
+    <div class="ic-line">Starts in ~4 sec &middot; ~350 MB RAM</div>
+  </div>
+</div>
+
+<!-- ══ LEGEND ══ -->
+<div class="legend">
+  <div class="legend-title">Legend</div>
+  <div class="legend-item"><span class="leg-dot leg-xml"></span> Artemis connection (XML)</div>
+  <div class="legend-item"><span class="leg-dot leg-xml-ret"></span> Return to Artemis (XML/JSON)</div>
+  <div class="legend-item"><span class="leg-dot leg-json-out"></span> Outbound / sink flow (byte[] + JSON)</div>
+  <div class="legend-item"><span class="leg-dot leg-json-in"></span> Inbound / source flow (RSAE JSON)</div>
+</div>
+
+<div class="footer">
+  Pink Line TMS Project &middot; PAS-SCADA-Kafka-Bridge &middot; Spring Boot + Apache Camel + AES-256-GCM
+</div>
+
 </body>
 </html>
