@@ -214,7 +214,11 @@ public class BridgeConfig {
     public static class InboundRoute {
         private String fromExchange;
         private String routingKey;
+        private String queue;
         private String toTopic;
+        // true  = convert RSAE JSON → XML before publishing to Artemis
+        // false = forward JSON as-is (default; TMS consumes JSON directly)
+        private boolean convertToXml = false;
 
         public String getFromExchange() { return fromExchange; }
         public void setFromExchange(String fromExchange) { this.fromExchange = fromExchange; }
@@ -222,7 +226,13 @@ public class BridgeConfig {
         public String getRoutingKey() { return routingKey; }
         public void setRoutingKey(String routingKey) { this.routingKey = routingKey; }
 
+        public String getQueue() { return queue; }
+        public void setQueue(String queue) { this.queue = queue; }
+
         public String getToTopic() { return toTopic; }
         public void setToTopic(String toTopic) { this.toTopic = toTopic; }
+
+        public boolean isConvertToXml() { return convertToXml; }
+        public void setConvertToXml(boolean convertToXml) { this.convertToXml = convertToXml; }
     }
 }

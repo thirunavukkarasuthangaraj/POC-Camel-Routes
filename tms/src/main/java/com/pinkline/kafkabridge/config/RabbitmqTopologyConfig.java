@@ -7,23 +7,18 @@ import org.springframework.amqp.core.TopicExchange;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * RabbitmqTopologyConfig
  *
- * Auto-declares the durable queue + binding used by the monitor route.
- * Spring AMQP's RabbitAdmin picks these beans up at startup and
- * creates them on the broker if they don't already exist.
+ * Auto-declares durable queues + bindings on startup via Spring AMQP's RabbitAdmin.
+ * Fresh RabbitMQ instances Just Work — no manual queue creation needed.
  *
- * Why this exists:
- *   Without this, the monitor route consumer starts before the queue
- *   exists, spams NOT_FOUND errors in a retry loop, and /api/messages
- *   stays empty until an operator manually creates the queue via
- *   RabbitMQ management API. With this config, fresh RabbitMQ instances
- *   Just Work on first start.
- *
- * Gating:
- *   Only runs when bridge.monitor.enabled=true (matches KafkaBridgeRoutes
- *   which only registers the consumer when the same flag is true).
+ * Queues declared here:
+ *   scada.monitor.queue     — optional in-bridge monitor feed (bridge.monitor.enabled)
+ *   scada.tms.alarms.queue  — always-on inbound: SCADA RSAE → TMS Artemis
  */
 @Configuration
 public class RabbitmqTopologyConfig {
@@ -35,26 +30,53 @@ public class RabbitmqTopologyConfig {
     }
 
     @Bean
-    public TopicExchange monitorExchange() {
-        // Durable topic exchange — amq.topic is built-in, but declaring it
-        // idempotently is safe and makes the intent explicit.
-        return new TopicExchange(config.getMonitor().getFromExchange(), true, false);
+    public TopicExchange scadaExchange() {
+        // amq.topic is built-in to RabbitMQ. Declaring it idempotently is safe.
+        return new TopicExchange("amq.topic", true, false);
     }
+
+    // ── Monitor queue (optional) ─────────────────────────────────────
 
     @Bean
     public Queue monitorQueue() {
         if (!config.getMonitor().isEnabled()) {
-            // Return a non-durable throwaway when monitor is disabled so
-            // RabbitAdmin doesn't touch the broker for an unused queue.
             return new Queue("bridge.monitor.disabled", false, true, true);
         }
         return new Queue(config.getMonitor().getQueue(), true, false, false);
     }
 
     @Bean
-    public Binding monitorBinding(Queue monitorQueue, TopicExchange monitorExchange) {
+    public Binding monitorBinding(Queue monitorQueue, TopicExchange scadaExchange) {
+        if (!config.getMonitor().isEnabled()) {
+            return BindingBuilder.bind(monitorQueue).to(scadaExchange).with("bridge.monitor.disabled");
+        }
         return BindingBuilder.bind(monitorQueue)
-                .to(monitorExchange)
+                .to(scadaExchange)
                 .with(config.getMonitor().getRoutingKey());
+    }
+
+    // ── Inbound queues: one per bridge.inbound[n] entry ─────────────
+
+    @Bean
+    public List<Queue> inboundQueues() {
+        List<Queue> queues = new ArrayList<>();
+        for (BridgeConfig.InboundRoute inb : config.getInbound()) {
+            if (inb.getQueue() != null && !inb.getQueue().isBlank()) {
+                queues.add(new Queue(inb.getQueue(), true, false, false));
+            }
+        }
+        return queues;
+    }
+
+    @Bean
+    public List<Binding> inboundBindings(List<Queue> inboundQueues, TopicExchange scadaExchange) {
+        List<Binding> bindings = new ArrayList<>();
+        List<BridgeConfig.InboundRoute> routes = config.getInbound();
+        for (int i = 0; i < inboundQueues.size(); i++) {
+            bindings.add(BindingBuilder.bind(inboundQueues.get(i))
+                    .to(scadaExchange)
+                    .with(routes.get(i).getRoutingKey()));
+        }
+        return bindings;
     }
 }

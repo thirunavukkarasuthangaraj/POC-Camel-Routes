@@ -4,6 +4,8 @@ import com.pinkline.kafkabridge.api.MessageStore;
 import com.pinkline.kafkabridge.config.BridgeConfig;
 import com.pinkline.kafkabridge.processor.DecryptExample;
 import com.pinkline.kafkabridge.processor.EncryptProcessor;
+import com.pinkline.kafkabridge.processor.JsonToXmlProcessor;
+import com.pinkline.kafkabridge.processor.ScadaInboundProcessor;
 import com.pinkline.kafkabridge.processor.XmlToJsonProcessor;
 import java.nio.charset.StandardCharsets;
 import org.apache.camel.LoggingLevel;
@@ -172,22 +174,38 @@ public class KafkaBridgeRoutes extends RouteBuilder {
         }
 
         // ══════════════════════════════════════════════════════════════════
-        // INBOUND ROUTES: RabbitMQ → Artemis (optional, one per inbound entry)
+        // INBOUND ROUTES: RabbitMQ/MQTT → Artemis (SCADA → TMS direction)
         //
-        // For commands/responses from SCADA back to TMS.
+        // SCADA API publishes RSAE JSON to MQTT topic "scada/tms/alarms".
+        // RabbitMQ MQTT plugin maps that to routing key "scada.tms.alarms"
+        // on amq.topic, which lands in the declared queue.
+        // Camel picks up from the queue → optional JSON→XML → Artemis topic.
+        //
         // Configure bridge.inbound[n] to enable.
         // ══════════════════════════════════════════════════════════════════
         for (BridgeConfig.InboundRoute inb : config.getInbound()) {
             String routeId = "inbound-" + inb.getRoutingKey().replace(".", "-")
                            + "-to-" + inb.getToTopic().replace(".", "-");
 
-            from("spring-rabbitmq:" + inb.getFromExchange()
+            String fromUri = "spring-rabbitmq:" + inb.getFromExchange()
                     + "?routingKey=" + inb.getRoutingKey()
-                    + "&autoStartup=true")
+                    + "&autoStartup=true";
+            if (inb.getQueue() != null && !inb.getQueue().isBlank()) {
+                fromUri += "&queues=" + inb.getQueue();
+            }
+
+            var route = from(fromUri)
                 .routeId(routeId)
-                .log("← RabbitMQ inbound [" + inb.getRoutingKey() + "]")
-                .to("activemq:topic:" + inb.getToTopic())
-                .log("→ Artemis [" + inb.getToTopic() + "]");
+                .log("← SCADA inbound [" + inb.getRoutingKey() + "] → Artemis [" + inb.getToTopic() + "]"
+                        + (inb.isConvertToXml() ? " (JSON→XML)" : " (JSON pass-through)"))
+                .process(new ScadaInboundProcessor());
+
+            if (inb.isConvertToXml()) {
+                route.process(new JsonToXmlProcessor());
+            }
+
+            route.to("activemq:topic:" + inb.getToTopic())
+                 .log("→ Artemis [" + inb.getToTopic() + "] delivered");
         }
 
         // ══════════════════════════════════════════════════════════════════
