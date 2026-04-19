@@ -31,11 +31,13 @@
     border-radius: 12px; padding: 14px 16px 18px;
     display: flex; flex-direction: column; gap: 12px;
   }
-  .zone-tms  { border: 2px solid #3b82f6; background: #eff6ff; }
-  .zone-scada{ border: 2px solid #14b8a6; background: #f0fdfa; }
+  .zone-tms     { border: 2px solid #3b82f6; background: #eff6ff; }
+  .zone-scada   { border: 2px solid #14b8a6; background: #f0fdfa; }
+  .zone-external{ border: 2px solid #f97316; background: #fff7ed; }
   .zone-label { font-size: 11px; font-weight: 800; letter-spacing: 1px; text-align: center; padding-bottom: 6px; }
-  .zone-tms   .zone-label { color: #1d4ed8; }
-  .zone-scada .zone-label { color: #0f766e; }
+  .zone-tms      .zone-label { color: #1d4ed8; }
+  .zone-scada    .zone-label { color: #0f766e; }
+  .zone-external .zone-label { color: #c2410c; }
 
   /* ── Component cards ── */
   .comp {
@@ -357,6 +359,70 @@
         </div>
       </div>
 
+      <!-- ══ CONNECTOR — SCADA/TMS → THALES.EPS ══ -->
+      <div class="connector" style="padding:10px 0 6px;">
+        <div class="conn-line">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="conn-badge" style="background:#1d4ed8;color:#dbeafe;">TMS &rarr; EPS</span>
+            <div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-size:7px;font-weight:700;color:#3b82f6;">Artemis topic: TMS.EPS.Info &rarr;</span>
+                <svg width="50" height="10"><line x1="0" y1="5" x2="46" y2="5" stroke="#3b82f6" stroke-width="2" stroke-dasharray="4,3"/><polygon points="42,2 50,5 42,8" fill="#3b82f6"/></svg>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="conn-line">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="conn-badge" style="background:#0f766e;color:#ccfbf1;">SCADA &rarr; EPS</span>
+            <div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-size:7px;font-weight:700;color:#14b8a6;">RabbitMQ key: eps.alarms &rarr;</span>
+                <svg width="50" height="10"><line x1="0" y1="5" x2="46" y2="5" stroke="#14b8a6" stroke-width="2" stroke-dasharray="4,3"/><polygon points="42,2 50,5 42,8" fill="#14b8a6"/></svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ EXTERNAL SYSTEMS ZONE ══ -->
+      <div class="zone zone-external">
+        <div class="zone-label">EXTERNAL SYSTEMS ZONE &nbsp;·&nbsp; downstream consumers</div>
+        <div class="row" style="justify-content:center;">
+
+          <!-- Thales.EPS.ExternalSystems -->
+          <div class="comp" style="width:440px;border-color:#fed7aa;">
+            <div class="comp-head" style="background:#ea580c;">
+              Thales.EPS.ExternalSystems
+              <div style="font-size:7px;font-weight:400;opacity:.85;margin-top:1px;">Electrical Power System &middot; third-party consumer</div>
+            </div>
+            <div class="comp-body">
+              <div class="sub">subscribes to TMS + SCADA message streams</div>
+              <hr style="border:none;border-top:1px solid #f1f5f9;margin:5px 0"/>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <div style="flex:1;background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;padding:7px 10px;min-width:180px;">
+                  <div style="font-size:8px;font-weight:700;color:#1d4ed8;margin-bottom:4px;">&#x25C0; FROM TMS</div>
+                  <div><span class="tag tag-blue">Source: Artemis topic</span></div>
+                  <div><span class="tag tag-blue">TMS.EPS.Info</span></div>
+                  <hr style="border:none;border-top:1px solid #bfdbfe;margin:5px 0"/>
+                  <div class="sub">TMS power-system commands</div>
+                  <div class="sub">substation status updates</div>
+                </div>
+                <div style="flex:1;background:#f0fdfa;border:1px solid #99f6e4;border-radius:5px;padding:7px 10px;min-width:180px;">
+                  <div style="font-size:8px;font-weight:700;color:#0f766e;margin-bottom:4px;">&#x25C0; FROM SCADA</div>
+                  <div><span class="tag tag-teal">Source: RabbitMQ routing</span></div>
+                  <div><span class="tag tag-teal">key: eps.alarms</span></div>
+                  <hr style="border:none;border-top:1px solid #99f6e4;margin:5px 0"/>
+                  <div class="sub">equipment alarms (RSAE)</div>
+                  <div class="sub">power-trip notifications</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
     </div>
     </div>
   </div>
@@ -392,6 +458,20 @@
         <span class="fn" style="background:#92400e;color:#fef3c7;">[opt] JsonToXmlProcessor</span><span class="fn-arr">→</span>
         <span class="fn fn-blue">Artemis: SCADA.TMS.Alarms</span><span class="fn-arr">→</span>
         <span class="fn fn-blue">TMS Server</span>
+      </div>
+
+      <div class="flow-row">
+        <span class="fl-label" style="color:#ea580c;">&#9655; TMS &rarr; Thales.EPS:</span>
+        <span class="fn fn-blue">TMS Server</span><span class="fn-arr">&rarr;</span>
+        <span class="fn fn-blue">Artemis: TMS.EPS.Info</span><span class="fn-arr">&rarr;</span>
+        <span class="fn" style="background:#ea580c;color:#ffedd5;">Thales.EPS.ExternalSystems</span>
+      </div>
+
+      <div class="flow-row">
+        <span class="fl-label" style="color:#ea580c;">&#9655; SCADA &rarr; Thales.EPS:</span>
+        <span class="fn fn-cyan">SCADA API</span><span class="fn-arr">&rarr;</span>
+        <span class="fn fn-purple">RabbitMQ routing: eps.alarms</span><span class="fn-arr">&rarr;</span>
+        <span class="fn" style="background:#ea580c;color:#ffedd5;">Thales.EPS.ExternalSystems</span>
       </div>
 
     </div>
