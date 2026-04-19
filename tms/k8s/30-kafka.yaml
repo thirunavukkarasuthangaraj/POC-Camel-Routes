@@ -6,6 +6,17 @@
 #   29092 → inter-broker (internal listener)
 # Topic auto-create is enabled for dev; tune in prod.
 # ═══════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kafka-data
+  namespace: pinkline
+spec:
+  accessModes: [ "ReadWriteOnce" ]
+  resources:
+    requests:
+      storage: 5Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -50,9 +61,16 @@ spec:
               value: "1"
             - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
               value: "true"
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /var/lib/kafka/data
           resources:
             requests: { memory: "512Mi", cpu: "250m" }
             limits:   { memory: "1Gi",   cpu: "500m" }
+      volumes:
+        - name: kafka-data
+          persistentVolumeClaim:
+            claimName: kafka-data
 ---
 apiVersion: v1
 kind: Service

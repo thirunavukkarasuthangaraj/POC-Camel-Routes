@@ -21,18 +21,15 @@ data:
   KAFKA_PORT: "9092"
 
   # ── RabbitMQ (EXTERNAL VM / SCADA cluster — cross-VM reach) ────────
-  # ▼ REPLACE with the external VM's reachable address ▼
-  #   - NodePort:     use the external VM's node IP/DNS, port=30672
-  #   - LoadBalancer: use the LB external IP, port=5672
   # spring.rabbitmq.host = ${RABBITMQ_HOST}
   # spring.rabbitmq.port = ${RABBITMQ_PORT}
-  RABBITMQ_HOST: "EXTERNAL-VM-IP-OR-DNS"
-  RABBITMQ_PORT: "30672"            # NodePort default — change to 5672 if LB
+  RABBITMQ_HOST: "10.4.0.25"
+  RABBITMQ_PORT: "5673"             # host-mapped port on SCADA VM
 
   # ── MQTT (same external RabbitMQ broker, MQTT plugin) ──────────────
   # bridge.mqtt.broker-url = tcp://${MQTT_HOST}:${MQTT_PORT}
-  MQTT_HOST: "EXTERNAL-VM-IP-OR-DNS"
-  MQTT_PORT: "31883"                # NodePort default — change to 1883 if LB
+  MQTT_HOST: "10.4.0.25"
+  MQTT_PORT: "1884"                 # host-mapped MQTT port on SCADA VM
 
   # ── Bridge pipeline & behaviour (configurable per env) ─────────────
   BRIDGE_PIPELINE: "kafka,rabbitmq,mqtt"
