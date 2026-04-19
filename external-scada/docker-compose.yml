@@ -42,9 +42,9 @@ services:
   # ── SCADA API (mock) ──────────────────────────────────────
   # Subscribes to MQTT tms/scada/pas, decrypts AES-GCM payload,
   # exposes received messages via HTTP.
-  #   Browse:   http://<ext-vm-ip>:8090/          (health + stats)
-  #             http://<ext-vm-ip>:8090/messages  (last 100 decrypted)
-  #             http://<ext-vm-ip>:8090/stream    (live SSE stream)
+  #   Browse:   http://<ext-vm-ip>:8091/          (health + stats)
+  #             http://<ext-vm-ip>:8091/messages  (last 100 decrypted)
+  #             http://<ext-vm-ip>:8091/stream    (live SSE stream)
   # Replace this with real SCADA API image when available.
   scada-api:
     build: ./scada-api
@@ -54,7 +54,7 @@ services:
       rabbitmq:
         condition: service_healthy   # wait until RabbitMQ is actually ready
     ports:
-      - "8091:8090"
+      - "8091:8091"
     environment:
       MQTT_HOST: rabbitmq
       MQTT_PORT: "1883"
@@ -66,7 +66,7 @@ services:
       # Must match the AES key the bridge used to encrypt.
       SCADA_AES_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request as r; r.urlopen(\"http://localhost:8090/api/status\").read()'"]
+      test: ["CMD-SHELL", "python -c 'import urllib.request as r; r.urlopen(\"http://localhost:8091/api/status\").read()'"]
       interval: 30s
       timeout: 5s
       retries: 3
