@@ -503,7 +503,7 @@ def api_config():
 @app.route("/api/publish", methods=["POST"])
 def api_publish():
     body = request.get_json(force=True, silent=True) or {}
-    alarm_id = body.get("id") or random.choice(EQUIPMENT)
+    alarm_id = body.get("id") or random.choice(DEFAULT_EQUIPMENT)
     state    = str(body.get("state", "1"))
     ok = publish_update_alarm(alarm_id, state)
     return jsonify({"ok": ok, "id": alarm_id, "state": state})

@@ -194,7 +194,7 @@ public class KafkaBridgeRoutes extends RouteBuilder {
                 fromUri += "&queues=" + inb.getQueue();
             }
 
-            var route = from(fromUri)
+            RouteDefinition route = from(fromUri)
                 .routeId(routeId)
                 .log("← SCADA inbound [" + inb.getRoutingKey() + "] → Artemis [" + inb.getToTopic() + "]"
                         + (inb.isConvertToXml() ? " (JSON→XML)" : " (JSON pass-through)"))
