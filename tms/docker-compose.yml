@@ -78,7 +78,7 @@ services:
 
       # ✅ External VM — tms-node03 / VM2 (10.4.0.25) running external-scada compose
       RABBITMQ_HOST: 10.4.0.25
-      RABBITMQ_PORT: "5672"
+      RABBITMQ_PORT: "5673"
       RABBITMQ_USER: thiru
       RABBITMQ_PASS: password
 
