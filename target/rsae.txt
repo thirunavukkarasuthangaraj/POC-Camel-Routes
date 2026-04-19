@@ -1,0 +1,671 @@
+      RENOVAÇÃO DOS SISTEMAS DE APOIO À
+       EXPLORACÇÃO DA METRO DO PORTO
+
+      RABBITMQ MESSAGE INTERFACE SPECIFICATION FOR
+                           METRO DO PORTO
+
+                              Código Metro do Porto: P-ST-00-0000-VV-ET-THS-000136-00
+
+Rev.  Data     Elaborado por  Revisto por            Aprovado por
+
+01 10/04/2018   Rui Lourenço  Paulo Davide Lourenço  António Jesus
+
+Assinaturas
+
+© Reservados todos os direitos. A cópia ou a entrega deste documento a terceiros, bem como o uso ou a comunicação do seu conteúdo, não são permitid os sem autorização
+escrita da Thales Portugal, S.A.
+RABBITMQ MESSAGE INTERFACE SPECIFICATION FOR METRO DO PORTO
+
+Index
+
+1 INTRODUCTION ....................................................................................................................................... 3
+        1.1 Scope.............................................................................................................................................. 3
+        1.2 Document History ......................................................................................................................... 3
+        1.3 Abbreviations ................................................................................................................................ 3
+        1.4 Reference Documents .................................................................................................................. 4
+
+2 SOLUTION DESCRIPTION ...................................................................................................................... 5
+        2.1 Connecting to RabbitMQ .............................................................................................................. 5
+        2.2 Messages ....................................................................................................................................... 5
+                 2.2.1 Update All Alarms (GetAllAlarms / SendAllAlarms Messages)..................................... 6
+                 2.2.2 Update One Alarm (UpdateAlarm Message) ................................................................... 6
+                 2.2.3 Keep Alive Message .......................................................................................................... 6
+        2.3 Messages Structure (JSON) ......................................................................................................... 7
+                 2.3.1 GetAllAlarms (JSON Structure) ........................................................................................ 8
+                 2.3.2 SendAllAlarms (JSON Structure) ..................................................................................... 9
+                 2.3.3 UpdateAlarm (JSON Structure) ...................................................................................... 10
+                 2.3.4 Alarm (JSON Structure)................................................................................................... 11
+                 2.3.5 KeepAlive (JSON Structure) ........................................................................................... 12
+
+3 ANNEX 1 ................................................................................................................................................. 13
+        3.1 Thales EPS RabbitMQ XML Configuration File ........................................................................ 13
+                 3.1.1 RabbitMQServers Element.............................................................................................. 13
+                 3.1.2 Mappings Element ........................................................................................................... 17
+                 3.1.3 RabbitMQConfiguration.xml Sample File ...................................................................... 18
+
+Rev.    Data                     Código                RABBITMQ MESSAGE INTERFACE     Pág.
+                  P-ST-00-0000-VV-ET-THS-000136-00  SPECIFICATION FOR METRO DO PORTO
+ 01   10/04/2018                                                                      2/19
+
+© Reservados todos os direitos. A cópia ou a entrega deste documento a terceiros, bem como o uso ou a comunicação do seu conteúdo, não são permitidos sem autorização escrita da Thales Portugal, S.A.
+RABBITMQ MESSAGE INTERFACE SPECIFICATION FOR METRO DO PORTO
+
+1 INTRODUCTION
+1.1 Scope
+This document describes the RabbitMQ message exchange process between different applications
+running in Metro do Porto environment.
+
+1.2 Document History
+
+Revision Date         Author          Reviewed by       Reason
+
+1.0          10.04.2018 Rui Lourenço  Davide Lourenço Initial version
+
+1.3 Abbreviations
+
+The following abbreviations are used in this document.
+
+Abbreviation          Description
+
+EPS                   Enhanced Public Security
+
+Application           Application running in Metro do Porto environment that is able to send
+                      and receive messages to and from RabbitMQ message broker.
+
+RabbitMQ              Open source message broker.
+
+Queue                 Object from RabbitMQ used to send and receive messages.
+
+Routing Key           Object from RabbitMQ used to filter which messages are going to be
+                      published or subscribed from a given Queue.
+
+Rev.        Data                     Código                RABBITMQ MESSAGE INTERFACE     Pág.
+                      P-ST-00-0000-VV-ET-THS-000136-00  SPECIFICATION FOR METRO DO PORTO
+ 01       10/04/2018                                                                      3/19
+
+© Reservados todos os direitos. A cópia ou a entrega deste documento a terceiros, bem como o uso ou a comunicação do seu conteúdo, não são permitidos sem autorização escrita da Thales Portugal, S.A.
+RABBITMQ MESSAGE INTERFACE SPECIFICATION FOR METRO DO PORTO
+
+1.4 Reference Documents
+
+Name                        Description
+
+[1] RabbitMQ documentation  https://www.rabbitmq.com
+                            https://www.rabbitmq.com/download.html
+                            https://www.rabbitmq.com/install-windows.html
+                            http://www.erlang.org/downloads
+
+Rev.    Data                     Código                RABBITMQ MESSAGE INTERFACE     Pág.
+                  P-ST-00-0000-VV-ET-THS-000136-00  SPECIFICATION FOR METRO DO PORTO
+ 01   10/04/2018                                                                      4/19
+
+© Reservados todos os direitos. A cópia ou a entrega deste documento a terceiros, bem como o uso ou a comunicação do seu conteúdo, não são permitidos sem autorização escrita da Thales Portugal, S.A.
+RABBITMQ MESSAGE INTERFACE SPECIFICATION FOR METRO DO PORTO
+
+2 SOLUTION DESCRIPTION
+
+This section of the document describes the global process for exchanging messages between
+different applications running in Metro do Porto environment, using the RabbitMQ message broker
+publisher/subscriber mechanism.
+
+2.1 Connecting to RabbitMQ
+
+In order to connect to the RabbitMQ message broker, an application must connect either as a
+publisher, a subscriber or both. For details on how to connect to RabbitMQ, please refer to [1].
+All the application connections are made to specific Queues. One or more Routing Keys must be
+defined and created to allow applications to connect to Queues in order to allow them to filter which
+messages are going to be published or subscribed in those Queues. For details on RabbitMQ specific
+terminologies and principles, please refer to [1].
+This process will allow the application to listen and send messages from/to other systems that are also
+connected to the same Queues and configured with the correct Routing Keys.
+
+2.2 Messages
+
+There are currently four types of messages defined in the Metro do Porto RabbitMQ environment:
+
+· GetAllAlarms:
+    message asking for a list of all the alarms defined in another application with their correspondent
+    status and timestamps.
+
+· SendAllAlarms:
+    message sent with the list of all the alarms defined in one application together with their status and
+    timestamp.
+
+· UpdateAlarm:
+    message sent with information about one specific alarm with the correspondent status and
+    timestamp.
+
+· KeepAlive:
+    message sent by the application to inform other applications connected to RabbitMQ that the
+    application is alive.
+
+Rev.    Data                     Código                RABBITMQ MESSAGE INTERFACE     Pág.
+                  P-ST-00-0000-VV-ET-THS-000136-00  SPECIFICATION FOR METRO DO PORTO
+ 01   10/04/2018                                                                      5/19
+
+© Reservados todos os direitos. A cópia ou a entrega deste documento a terceiros, bem como o uso ou a comunicação do seu conteúdo, não são permitidos sem autorização escrita da Thales Portugal, S.A.
+RABBITMQ MESSAGE INTERFACE SPECIFICATION FOR METRO DO PORTO
+
+2.2.1 Update All Alarms (GetAllAlarms / SendAllAlarms Messages)
+
+This scenario is used by an application that needs to request and receive all the alarms defined and
+available on another specific application connected to the Metro do Porto RabbitMQ message broker,
+in one single request.
+
+The logical process for using this message is as follows:
+
+1. The originator application sends the message GetAllAlarms to RabbitMQ, targeting a specific
+    Queue.
+
+2. All the application clients that are connected to this Queue will receive this message.
+3. The application clients that are programmed to respond to this specific message, on this targeted
+
+    Queue, will respond with the message SendAllAllarms.
+4. The originator Application receives the message SendAllAlarms together with the list of all the
+
+    alarms requested and processes this message accordingly.
+
+2.2.2 Update One Alarm (UpdateAlarm Message)
+
+This scenario is used by an application to send a status update of one specific alarm to other
+applications connected to the Metro do Porto RabbitMQ message broker.
+
+The logical process for using this message is as follows:
+
+1. Whenever the originator application internally processes an alarm status change, sends the
+    message UpdateAlarm to RabbitMQ, targeting a specific Queue.
+
+2. All the application clients that are connected to this Queue will receive this message.
+3. The application clients that are programmed to respond to this specific message, on this targeted
+
+    Queue, will process this message accordingly.
+
+2.2.3 Keep Alive Message
+
+This scenario is used by an application to inform other applications connected to the Metro do Porto
+RabbitMQ message broker that it is running and working properly.
+
+The logical process for using this message is as follows:
+
+1. Every X seconds (parameter internally defined by the application) the originator application sends
+    the message KeepAlive to RabbitMQ, targeting a specific Queue.
+
+2. All the application clients that are connected to this Queue will receive this message.
+3. The application clients that are programmed to respond to this specific message, on this targeted
+
+    Queue, will process this message accordingly.
+
+Rev.    Data                     Código                RABBITMQ MESSAGE INTERFACE     Pág.
+                  P-ST-00-0000-VV-ET-THS-000136-00  SPECIFICATION FOR METRO DO PORTO
+ 01   10/04/2018                                                                      6/19
+
+© Reservados todos os direitos. A cópia ou a entrega deste documento a terceiros, bem como o uso ou a comunicação do seu conteúdo, não são permitidos sem autorização escrita da Thales Portugal, S.A.
+RABBITMQ MESSAGE INTERFACE SPECIFICATION FOR METRO DO PORTO
+
+2.3 Messages Structure (JSON)
+
+All the messages previously described obey to a predefined JSON structure, which is described in the
+sections below.
+
+Rev.    Data                     Código                RABBITMQ MESSAGE INTERFACE     Pág.
+                  P-ST-00-0000-VV-ET-THS-000136-00  SPECIFICATION FOR METRO DO PORTO
+ 01   10/04/2018                                                                      7/19
+
+© Reservados todos os direitos. A cópia ou a entrega deste documento a terceiros, bem como o uso ou a comunicação do seu conteúdo, não são permitidos sem autorização escrita da Thales Portugal, S.A.
+RABBITMQ MESSAGE INTERFACE SPECIFICATION FOR METRO DO PORTO
+
+2.3.1 GetAllAlarms (JSON Structure)
+
+Name       Description                    Data           Length Format
+                                          type           Variable Any string
+                                                         Variable GetAllAlarms
+CreatorId  Name of the system that        String         Variable YYYY-MM-DD HH:mm:ss.fff
+           originated the message
+
+Type       Name to identify message       String
+           type
+
+Timestamp Message timestamp               String
+
+JSON example:
+
+{
+"CreatorId" : "EPS",
+"Type" : " GetAllAlarms ",
+"Timestamp" : "2017-09-30 15:40:30.111",
+}
+
+Rev.         Data                     Código                RABBITMQ MESSAGE INTERFACE     Pág.
+                       P-ST-00-0000-VV-ET-THS-000136-00  SPECIFICATION FOR METRO DO PORTO
+ 01        10/04/2018                                                                      8/19
+
+© Reservados todos os direitos. A cópia ou a entrega deste documento a terceiros, bem como o uso ou a comunicação do seu conteúdo, não são permitidos sem autorização escrita da Thales Portugal, S.A.
+RABBITMQ MESSAGE INTERFACE SPECIFICATION FOR METRO DO PORTO
+
+2.3.2 SendAllAlarms (JSON Structure)
+
+Name       Description                Data               Length Format
+                                      type
+
+CreatorId  Name of the system that    String Variable Any string
+           originated the message
+
+Type       Name to identify message   String             Variable SendAllAlarms
+           type
+
+Timestamp Message timestamp           String Variable YYYY-MM-DD HH:mm:ss.fff
+
+Alarms     List of alarms in the format of Alarms[] Variable Alarm list
+
+           JSON array                                        - see Alarm (JSON structure)
+
+JSON example:
+
+{
+"CreatorId" : "EPS",
+"Type" : "SendAllAlarms",
+"Timestamp" : "2017-09-25 15:40:30.111",
+"Alarms" : [
+
+     {"Timestamp" : "2017-09-30 15:40:30.111","Id":"ESC_ROL_1_23", "State" : "0"},
+     {"Timestamp" : "2017-09-30 15:40:30.111","Id":"ESC_ROL_2_27", "State" : "0"},
+     {"Timestamp" : "2017-09-30 15:40:30.111","Id":"ESC_ROL_3_25", "State" : "0"},
+     ]
+}
+
+Rev.         Data                     Código                RABBITMQ MESSAGE INTERFACE     Pág.
+                       P-ST-00-0000-VV-ET-THS-000136-00  SPECIFICATION FOR METRO DO PORTO
+ 01        10/04/2018                                                                      9/19
+
+© Reservados todos os direitos. A cópia ou a entrega deste documento a terceiros, bem como o uso ou a comunicação do seu conteúdo, não são permitidos sem autorização escrita da Thales Portugal, S.A.
+RABBITMQ MESSAGE INTERFACE SPECIFICATION FOR METRO DO PORTO
+
+2.3.3 UpdateAlarm (JSON Structure)
+
+Name       Description               Data                Length Format
+                                     type
+
+CreatorId  Name of the system that   String              Variable Any string
+           originated the message
+
+Type       Name to identify message  String              Variable UpdateAlarm
+           type
+
+Timestamp Message timestamp          String Variable YYYY-MM-DD HH:mm:ss.fff
+
+Alarm      Alarm                     Alarm               Variable Any Alarm
+                                                                        - see Alarm (JSON structure)
+
+JSON example:
+
+{
+"CreatorId" : "EPS",
+"Type" : "UpdateAlarm",
+"Timestamp" : "2017-09-25 15:40:30.111",
+"Alarms" : {
+
+     "Timestamp" : "2017-09-30 15:40:30.111","Id":"ESC_ROL_1_23", "State" : "0"
+
+     }
+}
+
+Rev.         Data                     Código                RABBITMQ MESSAGE INTERFACE     Pág.
+                       P-ST-00-0000-VV-ET-THS-000136-00  SPECIFICATION FOR METRO DO PORTO
+ 01        10/04/2018                                                                      10/19
+
+© Reservados todos os direitos. A cópia ou a entrega deste documento a terceiros, bem como o uso ou a comunicação do seu conteúdo, não são permitidos sem autorização escrita da Thales Portugal, S.A.
+RABBITMQ MESSAGE INTERFACE SPECIFICATION FOR METRO DO PORTO
+
+2.3.4 Alarm (JSON Structure)
+
+Name      Description                     Data type Length Format
+
+Timestamp Message timestamp               String        Variable YYYY-MM-DD HH:mm:ss.fff
+
+Id        The Id of the alarm             String        Variable Any string
+
+State     State of the alarm              String        Variable  e.g., 0 ­ Off, 1 ­ On (other
+                                                                  states are also possible
+                                                                  depending on the system)
+
+JSON example:
+
+{
+"Timestamp" : "2017-09-30 15:40:30.111",
+"Id" : "ESCROL_01_02",
+"State" : "0"
+}
+
+    Rev.    Data                     Código                RABBITMQ MESSAGE INTERFACE     Pág.
+                      P-ST-00-0000-VV-ET-THS-000136-00  SPECIFICATION FOR METRO DO PORTO
+     01   10/04/2018                                                                      11/19
+
+© Reservados todos os direitos. A cópia ou a entrega deste documento a terceiros, bem como o uso ou a comunicação do seu conteúdo, não são permitidos sem autorização escrita da Thales Portugal, S.A.
+RABBITMQ MESSAGE INTERFACE SPECIFICATION FOR METRO DO PORTO
+
+2.3.5 KeepAlive (JSON Structure)
+
+Name       Description                   Data            Length Format
+                                         type            Variable Any string
+                                                         Variable KeepAlive
+CreatorId  Name of the system that       String          Variable YYYY-MM-DD HH:mm:ss.fff
+           originated the message
+
+Type       Name to identify message      String
+           type
+
+Timestamp Message timestamp              String
+
+JSON example:
+
+{
+"CreatorId" : "EPS",
+"Type" : "KeepAlive",
+"Timestamp" : "2017-09-25 15:40:30.111"
+}
+
+Rev.         Data                     Código                RABBITMQ MESSAGE INTERFACE     Pág.
+                       P-ST-00-0000-VV-ET-THS-000136-00  SPECIFICATION FOR METRO DO PORTO
+ 01        10/04/2018                                                                      12/19
+
+© Reservados todos os direitos. A cópia ou a entrega deste documento a terceiros, bem como o uso ou a comunicação do seu conteúdo, não são permitidos sem autorização escrita da Thales Portugal, S.A.
+RABBITMQ MESSAGE INTERFACE SPECIFICATION FOR METRO DO PORTO
+
+3 ANNEX 1
+
+3.1 Thales EPS RabbitMQ XML Configuration File
+
+This section of the document was created to better illustrate the connection process followed by
+Thales EPS to connect to RabbitMQ server(s) (in both publisher and subscriber modes).
+Whenever Thales EPS starts, it reads the file "RabbitMQConfiguration.xml" to check the endpoint(s) it
+must connect, the alarms it must respond to and the equipment's it must recognize.
+This file is composed by an XML declaration (Prolog), a root node called RabbiMQConfiguration, and
+two child nodes called RabbitMQServers and Mappings. The child node RabbitMQServers must have
+at least one child element called Server (can be a collection of Server elements). The Server element
+must have at least a node called Publisher or Receiver.
+The child node Mappings must have two child nodes called Equipments and Alarms. The child node
+Equipments must have at least one child node called Equipment (can be a collection of Equipment
+elements). The child node Alarms must have at least one child node called Alarm (can be a collection
+of Alarm elements).
+
+3.1.1 RabbitMQServers Element
+
+The RabbitMQServers element is a child node of RabbitMQConfiguration root node.
+This element is just a holder for a collection of Server elements.
+
+3.1.1.1 Server Element
+
+The server name has:
+         - Two child nodes: Publisher and Receiver.
+         - Five properties: Ip, UserName, Password, HeartbeatTimeOut and
+         OnServerStatusChangedFireTrigger
+
+Rev.    Data                     Código                RABBITMQ MESSAGE INTERFACE     Pág.
+                  P-ST-00-0000-VV-ET-THS-000136-00  SPECIFICATION FOR METRO DO PORTO
+ 01   10/04/2018                                                                      13/19
+
+© Reservados todos os direitos. A cópia ou a entrega deste documento a terceiros, bem como o uso ou a comunicação do seu conteúdo, não são permitidos sem autorização escrita da Thales Portugal, S.A.
+RABBITMQ MESSAGE INTERFACE SPECIFICATION FOR METRO DO PORTO
+
+Name                  Description                       Data type Length                  Format
+                                                                                          Any string
+IP                    The IP of RabbitMQ server String       Variable
+                                                                                          Any String
+                      broker
+                                                                                          Any string
+UserName              The user name registered in String     Variable
+                      RabbitMQ server broker                                              Any string
+                                                                                          representing a
+Password              The password for the user String       Variable                     number
+                      name registered in                                                  Any string
+                      RabbitMQ server broker                                              representing a
+                                                                                          number
+HeartbeatTimeOut      The maximum timeout for a String       Variable
+                      lost connection
+
+OnServerStatusCha Parameter used internally in String        Variable
+
+ngedFireTigger        Thales EPS.
+
+3.1.1.2 Publisher Element
+
+The Publisher element is a child node of Server element.
+This element, as the name suggests, is responsible for defining all the properties of a queue to where
+Thales EPS will publish its messages. It is possible to define more than one Publisher element.
+
+The Publisher element has six properties: ExchangeName, ExchangeType, ExchangeRoutingKey,
+SendAlarmsUpdatesOnStartup, KeepAlivePoolingTime, CreatorId.
+
+    Rev.    Data                     Código                RABBITMQ MESSAGE INTERFACE     Pág.
+                      P-ST-00-0000-VV-ET-THS-000136-00  SPECIFICATION FOR METRO DO PORTO
+     01   10/04/2018                                                                      14/19
+
+© Reservados todos os direitos. A cópia ou a entrega deste documento a terceiros, bem como o uso ou a comunicação do seu conteúdo, não são permitidos sem autorização escrita da Thales Portugal, S.A.
+RABBITMQ MESSAGE INTERFACE SPECIFICATION FOR METRO DO PORTO
+
+Name                   Description                       Data type Length                  Format
+                                                                                           Any string
+ExchangeName           The name of the String                    Variable
+                       exchange to where the                                               Any String
+                       messages will be                                                    Any string
+                       published                                                           Any String
+
+ExchangeType           The exchange types:               String  Variable                  Any string
+                       fanout or topic                                                     representing a
+                                                                                           number
+ExchangeRoutingKey Exchange routing key String                   Variable                  Any string
+
+SendAlarmsUpdatesOn    True, to send the String                  Variable
+Startup                alarms on service
+                       startup.
+
+                       False, do not send the
+                       alarms on service
+                       startup
+
+KeepAlivePoolingTime   Seconds to send keep String               Variable
+                       alive messages (0 =
+                       doesn't send any
+                       KeepAlive message)
+
+CreatorId              Name of the system String                 Variable
+                       that originated the
+                       message
+
+3.1.1.3 Receiver Element
+
+The Receiver element is a child node of Server element.
+This element is responsible for defining all the properties of a binding queue from where Thales EPS
+will receive the messages. It is possible to define more than one Receiver element.
+
+Rev.         Data                     Código                RABBITMQ MESSAGE INTERFACE     Pág.
+                       P-ST-00-0000-VV-ET-THS-000136-00  SPECIFICATION FOR METRO DO PORTO
+ 01        10/04/2018                                                                      15/19
+
+© Reservados todos os direitos. A cópia ou a entrega deste documento a terceiros, bem como o uso ou a comunicação do seu conteúdo, não são permitidos sem autorização escrita da Thales Portugal, S.A.
+RABBITMQ MESSAGE INTERFACE SPECIFICATION FOR METRO DO PORTO
+
+The Receiver element has six properties: BindToExchange, BindRoutingKey, QueueName,
+
+AutoPurgeMessagesOnStartup,         CreateExchangeUsingExchangeType,                       CreatorId,
+
+OnKeepAliveFireTigger, KeepAlivePoolingTime.
+
+Name                   Description                       Data  Length                      Format
+                                                         type
+
+BindToExchange         The name of the exchange String         Variable                    Any string
+                       from where the messages
+                       will be received.
+
+BindRoutingKey         Exchange routing key.             String Variable                   Any String
+
+QueueName              The name of the queue String            Variable                    Any string
+                       from where the messages
+                       will be received.
+
+AutoPurgeMessagesOn    True, clear all messages String         Variable                    Any String
+Startup                that are on the queue on
+                       service startup.
+
+                       False, do not clear the
+                       messages that are on the
+                       queue on service startup.
+
+CreateExchangeUsingE The exchange types:                 String Variable                   Any string
+
+xchangeType            fanout or topic.
+
+CreatorId              Name of the system that String          Variable                    Any string
+                       originated the message.
+
+OnKeepAliveFireTigger Parameter used internally String         Variable                    Any string
+                                      in Thales EPS.                                       representing a
+                                                                                           number
+
+KeepAlivePoolingTime   Seconds to receive Keep String          Variable                    Any string
+                       Alive messages from                                                 representing a
+                       CreatorId (0 = Disabled).                                           number
+
+Rev.         Data                     Código                RABBITMQ MESSAGE INTERFACE     Pág.
+                       P-ST-00-0000-VV-ET-THS-000136-00  SPECIFICATION FOR METRO DO PORTO
+ 01        10/04/2018                                                                      16/19
+
+© Reservados todos os direitos. A cópia ou a entrega deste documento a terceiros, bem como o uso ou a comunicação do seu conteúdo, não são permitidos sem autorização escrita da Thales Portugal, S.A.
+RABBITMQ MESSAGE INTERFACE SPECIFICATION FOR METRO DO PORTO
+
+3.1.2 Mappings Element
+
+The Mapping element is a child node of RabbitMQConfiguration root node.
+This element is just a holder for the Equipment element and Alarms element.
+
+3.1.2.1 Equipment Element
+
+The Equipment element is a child node of Mapping element.
+This element is just a holder for a collection of Equipment elements.
+If Thales EPS receive a message with an ExternalId that is not mapped on this list, Thales EPS will
+discard this message.
+
+3.1.2.2 Equipment Element
+
+The Equipment element has three properties: ExternalId, TriggerId and AlarmOn.
+
+Name        Description                                   Data type Length Format
+
+ExternalId  A name identifying a device.                  String  Variable Any string
+            This ID should be shared
+            between all interface
+            participants.
+
+TrgiggerId  A trigger Id configured in Thales String              Variable  Any string
+            EPS.                                                            representing a
+                                                                            number
+
+AlarmOn     Defines the values that                       String  Variable  Any string
+            represent an alarm triggered.                                   representing a
+                                                                            number separated by
+                                                                            commas. Ex: "1,2,5"
+
+3.1.2.3 Alarms Element
+
+The Alarms element is a child node of Mapping element.
+This element is just a holder for a collection of alarm elements.
+If Thales EPS processes an alarm that is not on this list, then that alarm status will not be treated by
+Thales EPS.
+
+Rev.          Data                     Código                RABBITMQ MESSAGE INTERFACE     Pág.
+                        P-ST-00-0000-VV-ET-THS-000136-00  SPECIFICATION FOR METRO DO PORTO
+ 01         10/04/2018                                                                      17/19
+
+© Reservados todos os direitos. A cópia ou a entrega deste documento a terceiros, bem como o uso ou a comunicação do seu conteúdo, não são permitidos sem autorização escrita da Thales Portugal, S.A.
+RABBITMQ MESSAGE INTERFACE SPECIFICATION FOR METRO DO PORTO
+
+3.1.2.4 Alarm Element
+The Alarm element has three properties: AlarmId, ExternalId and Description
+
+Name        Description                                   Data type Length Format
+
+AlarmId     An alarm Id configured in Thales String       Variable           Any string
+            EPS.                                                             representing a
+                                                                             number
+
+ExternalId  The value in this field should be String      Variable           Any string
+            the same as AlarmId.                                             representing a
+                                                                             number
+
+Description A name identifying the AlarmId. String        Variable Any string
+
+3.1.3 RabbitMQConfiguration.xml Sample File
+
+Name        Description  Data type Length Format
+
+<?xml version="1.0" encoding="utf-8" ?>
+<RabbitMQConfiguration>
+
+           <RabbitMQServers>
+                       <Server IP="127.0.0.1" UserName="guest" Password="guest"
+
+HeartbeatTimeOut="30" OnServerStatusChangedFireTigger="99">
+
+                                   <Publisher ExchangeName="Thales.EPS" ExchangeType="topic"
+ExchangeRoutingKey="Thales.EPS" SendAlarmsUpdatesOnStartup="True" KeepAlivePoolingTime="0"
+CreatorId="EPS"/>
+
+                                   <Receiver BindToExchange="amq.topic" BindRoutingKey="efacec.#"
+QueueName="Thales.EPS.ExternalSystems.Queue" AutoPurgeMessagesOnStartup="True"
+CreateExchangeUsingExchangeType="topic" CreatorId="ScateX" OnKeepAliveFireTigger="98"
+KeepAlivePoolingTime="60" />
+
+                                   <Receiver BindToExchange="DecUnify" BindRoutingKey="DecUnify.*"
+QueueName="Thales.EPS.ExternalSystems.Queue" AutoPurgeMessagesOnStartup="True"
+CreateExchangeUsingExchangeType="topic" CreatorId="DECOM" OnKeepAliveFireTigger="97"
+KeepAlivePoolingTime="0"/>
+
+                       </Server>
+           </RabbitMQServers>
+
+Rev.          Data                     Código                RABBITMQ MESSAGE INTERFACE     Pág.
+                        P-ST-00-0000-VV-ET-THS-000136-00  SPECIFICATION FOR METRO DO PORTO
+ 01         10/04/2018                                                                      18/19
+
+© Reservados todos os direitos. A cópia ou a entrega deste documento a terceiros, bem como o uso ou a comunicação do seu conteúdo, não são permitidos sem autorização escrita da Thales Portugal, S.A.
+RABBITMQ MESSAGE INTERFACE SPECIFICATION FOR METRO DO PORTO
+
+           <Mappings>
+                       <Equipments>
+                                   <!-- SCADA Alarms to EPS-->
+                                   <Equipment ExternalId="DNVEL01.ALC.ED06" TriggerId="100001"
+
+AlarmOn="1,2,3" />
+                                   <Equipment ExternalId="DNVEL02.ALC.ED06" TriggerId="100002"
+
+AlarmOn="1"/>
+                                   <!-- DecUnify Alarms to EPS-->
+
+                                   <Equipment ExternalId="32901" TriggerId="10001" AlarmOn="1"/>
+
+                                   <Equipment ExternalId="32902" TriggerId="10002" AlarmOn="1"/>
+
+                       </Equipments>
+
+                       <Alarms>
+                                   <!-- ALARMES MAVB A ENVIAR DO EPS PARA O RABBITMQ -->
+                                   <Alarm AlarmId="621" Description="MON_MAVB1 Porta Aberta"
+
+ExternalId="621" />
+                                   <Alarm AlarmId="622" Description="MON_MAVB2 Porta Aberta"
+
+ExternalId="622" />
+
+                       </Alarms>
+           </Mappings>
+</RabbitMQConfiguration>
+
+                  End of Document
+
+Rev.    Data                     Código                RABBITMQ MESSAGE INTERFACE                 Pág.
+                  P-ST-00-0000-VV-ET-THS-000136-00  SPECIFICATION FOR METRO DO PORTO
+ 01   10/04/2018                                                                                  19/19
+
+© Reservados todos os direitos. A cópia ou a entrega deste documento a terceiros, bem como o uso ou a comunicação do seu conteúdo, não são permitidos sem autorização escrita da Thales Portugal, S.A.
+
