@@ -80,24 +80,30 @@ AES_KEY = base64.b64decode(AES_KEY_B64) if AES_KEY_B64 else None
 # requirement. Dashboard reflects changes via SSE.
 runtime = {
     # ── Timer intervals ─────────────────────────
-    "keepalive_seconds":      30,
-    "auto_alarm_seconds":     10,     # 0 = disabled
-    "auto_alarm_enabled":     True,
-    "keepalive_paused":       False,
+    "keepalive_seconds":        30,
+    "auto_alarm_seconds":       10,     # 0 = disabled
+    "auto_alarm_enabled":       True,
+    "keepalive_paused":         False,
+    "send_all_alarms_seconds":  60,     # 0 = disabled; auto-broadcast all alarms
+    "send_all_alarms_enabled":  True,
+    "get_all_alarms_seconds":   120,    # 0 = disabled; proactively ask TMS for all alarms
+    "get_all_alarms_enabled":   True,
 
     # ── Identity & topics (mutable) ─────────────
-    "creator_id":             CREATOR_ID,
-    "topic_out":              TOPIC_OUT,
-    "topic_in":               TOPIC_IN,
+    "creator_id":               CREATOR_ID,
+    "topic_out":                TOPIC_OUT,
+    "topic_in":                 TOPIC_IN,
 
     # ── Equipment list (mutable via /api/config) ─
-    "equipment":              [],     # filled below after class defs
+    "equipment":                [],     # filled below after class defs
 
     # ── Runtime status (read-only from dashboard) ─
-    "mqtt_connected":         False,
-    "last_keepalive_sent":    None,
-    "last_tms_received":      None,
-    "last_alarm_sent":        None,
+    "mqtt_connected":           False,
+    "last_keepalive_sent":      None,
+    "last_tms_received":        None,
+    "last_alarm_sent":          None,
+    "last_send_all_sent":       None,
+    "last_get_all_sent":        None,
 }
 
 # ── In-memory stores ──────────────────────────────────────────────────
@@ -112,6 +118,7 @@ stats = {
     "sent_alarm":   0,
     "sent_ka":      0,
     "sent_all":     0,
+    "sent_get_all": 0,
     "decrypt_ok":   0,
     "decrypt_fail": 0,
 }
@@ -281,6 +288,21 @@ def send_all_alarms():
     ok = publish(runtime["topic_out"], envelope, "SendAllAlarms")
     if ok:
         stats["sent_all"] += 1
+        runtime["last_send_all_sent"] = now_iso()
+    return ok
+
+
+def publish_get_all_alarms():
+    """SCADA proactively requests full alarm state from TMS."""
+    envelope = {
+        "CreatorId": runtime["creator_id"],
+        "Type":      "GetAllAlarms",
+        "Timestamp": now_rsae(),
+    }
+    ok = publish(runtime["topic_out"], envelope, "GetAllAlarms")
+    if ok:
+        stats["sent_get_all"] += 1
+        runtime["last_get_all_sent"] = now_iso()
     return ok
 
 
@@ -321,6 +343,34 @@ def auto_alarm_timer():
             eq = random.choice(runtime["equipment"])
             state = random.choice(["0", "1", "0", "0"])  # skewed toward OK
             publish_update_alarm(eq, state)
+
+
+def send_all_alarms_timer():
+    while True:
+        time.sleep(1)
+        if (not runtime["send_all_alarms_enabled"] or
+                not runtime["mqtt_connected"] or
+                runtime["send_all_alarms_seconds"] <= 0):
+            continue
+        time.sleep(max(0, runtime["send_all_alarms_seconds"] - 1))
+        if (runtime["send_all_alarms_enabled"] and
+                runtime["mqtt_connected"] and
+                runtime["send_all_alarms_seconds"] > 0):
+            send_all_alarms()
+
+
+def get_all_alarms_timer():
+    while True:
+        time.sleep(1)
+        if (not runtime["get_all_alarms_enabled"] or
+                not runtime["mqtt_connected"] or
+                runtime["get_all_alarms_seconds"] <= 0):
+            continue
+        time.sleep(max(0, runtime["get_all_alarms_seconds"] - 1))
+        if (runtime["get_all_alarms_enabled"] and
+                runtime["mqtt_connected"] and
+                runtime["get_all_alarms_seconds"] > 0):
+            publish_get_all_alarms()
 
 
 def mqtt_loop():
@@ -399,7 +449,7 @@ def api_metrics():
         "silence_in_sec":    silence_in,
         "silence_out_sec":   silence_out,
         "total_received":    stats["received"],
-        "total_sent":        stats["sent_alarm"] + stats["sent_ka"] + stats["sent_all"],
+        "total_sent":        stats["sent_alarm"] + stats["sent_ka"] + stats["sent_all"] + stats["sent_get_all"],
         "mqtt_connected":    runtime["mqtt_connected"],
     })
 
@@ -410,7 +460,8 @@ def api_config():
     body = request.get_json(force=True, silent=True) or {}
 
     # Numeric intervals
-    for key in ("keepalive_seconds", "auto_alarm_seconds"):
+    for key in ("keepalive_seconds", "auto_alarm_seconds",
+                "send_all_alarms_seconds", "get_all_alarms_seconds"):
         if key in body:
             try:
                 runtime[key] = max(0, int(body[key]))
@@ -418,7 +469,8 @@ def api_config():
                 pass
 
     # Booleans
-    for key in ("auto_alarm_enabled", "keepalive_paused"):
+    for key in ("auto_alarm_enabled", "keepalive_paused",
+                "send_all_alarms_enabled", "get_all_alarms_enabled"):
         if key in body:
             runtime[key] = bool(body[key])
 
@@ -477,6 +529,12 @@ def api_sendall():
     return jsonify({"ok": ok, "alarmCount": len(alarm_db)})
 
 
+@app.route("/api/getall", methods=["POST"])
+def api_getall():
+    ok = publish_get_all_alarms()
+    return jsonify({"ok": ok})
+
+
 @app.route("/api/stream")
 def api_stream():
     def gen():
@@ -502,7 +560,9 @@ def api_stream():
 
 
 if __name__ == "__main__":
-    threading.Thread(target=mqtt_loop,       daemon=True).start()
-    threading.Thread(target=keepalive_timer, daemon=True).start()
-    threading.Thread(target=auto_alarm_timer, daemon=True).start()
-    app.run(host="0.0.0.0", port=8090, threaded=True)
+    threading.Thread(target=mqtt_loop,             daemon=True).start()
+    threading.Thread(target=keepalive_timer,       daemon=True).start()
+    threading.Thread(target=auto_alarm_timer,      daemon=True).start()
+    threading.Thread(target=send_all_alarms_timer, daemon=True).start()
+    threading.Thread(target=get_all_alarms_timer,  daemon=True).start()
+    app.run(host="0.0.0.0", port=8091, threaded=True)

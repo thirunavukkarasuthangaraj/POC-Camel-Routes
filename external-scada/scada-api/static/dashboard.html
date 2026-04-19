@@ -2,468 +2,749 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>SCADA Simulator — Live Communication Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SCADA Simulator — Live Dashboard</title>
 <style>
-  :root {
-    --bg:#0b1220; --panel:#121b2e; --panel2:#0f1726; --line:#1e2a44;
-    --txt:#e2e8f0; --muted:#7c8db0; --accent:#22d3ee;
-    --ok:#10b981; --warn:#f59e0b; --err:#ef4444;
-    --in:#38bdf8; --out:#a78bfa;
-  }
-  *{box-sizing:border-box;}
-  body{margin:0;background:var(--bg);color:var(--txt);
-       font-family:-apple-system,Segoe UI,Inter,Roboto,sans-serif;
-       font-size:13px;line-height:1.45;}
-  header{padding:10px 18px;background:#0f1829;border-bottom:1px solid var(--line);
-         display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;}
-  header h1{margin:0;font-size:16px;color:var(--accent);letter-spacing:.5px;}
-  .pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;
-        background:var(--panel);font-size:12px;border:1px solid var(--line);}
-  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);}
-  .dot.on{background:var(--ok);box-shadow:0 0 8px var(--ok);}
-  .dot.off{background:var(--err);box-shadow:0 0 6px var(--err);}
-  .dot.pulse{animation:pulse 1.2s infinite;}
-  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.2)}}
+:root {
+  --bg:      #080e1a;
+  --surface: #0e1829;
+  --card:    #111d30;
+  --border:  #1b2d4a;
+  --border2: #243759;
+  --txt:     #e2e8f0;
+  --muted:   #6b80a0;
+  --dim:     #3d5270;
+  --accent:  #22d3ee;
+  --ok:      #10b981;
+  --warn:    #f59e0b;
+  --err:     #ef4444;
+  --in-clr:  #38bdf8;
+  --ua:      #f59e0b;
+  --ka:      #10b981;
+  --sa:      #a78bfa;
+  --ga:      #38bdf8;
+  --font:    -apple-system,'Segoe UI',Inter,Roboto,sans-serif;
+  --mono:    Consolas,'Courier New',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--txt);font-family:var(--font);font-size:13px;line-height:1.5;}
 
-  /* ─── Flow diagram ───────────────────────────────── */
-  .flow-diagram{padding:18px;background:var(--panel2);border-bottom:1px solid var(--line);}
-  .flow-svg{width:100%;max-width:1200px;margin:0 auto;display:block;}
-  .hop-label{font:600 12px sans-serif;fill:var(--txt);}
-  .hop-proto{font:10px Consolas,monospace;fill:var(--muted);}
-  .hop-rate{font:600 11px Consolas,monospace;fill:var(--accent);}
-  .node rect{fill:#162238;stroke:var(--line);stroke-width:1;rx:6;}
-  .node.active rect{stroke:var(--ok);filter:drop-shadow(0 0 4px var(--ok));}
-  .node.fail  rect{stroke:var(--err);filter:drop-shadow(0 0 4px var(--err));}
-  .pipe{stroke:var(--line);stroke-width:2;fill:none;}
-  .pipe.active{stroke:var(--accent);}
-  .packet{fill:var(--accent);}
+/* ── Header ── */
+.hdr{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;
+     display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.hdr h1{font-size:16px;color:var(--accent);font-weight:700;}
+.hdr p{font-size:11px;color:var(--muted);margin-top:2px;}
+.hdr-right{display:flex;gap:7px;flex-wrap:wrap;align-items:center;}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:20px;
+      background:var(--card);border:1px solid var(--border2);font-size:11px;font-weight:500;}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--dim);flex-shrink:0;}
+.dot.on{background:var(--ok);box-shadow:0 0 7px var(--ok);}
+.dot.off{background:var(--err);box-shadow:0 0 5px var(--err);}
+.dot.pulse{animation:blink 1.3s ease-in-out infinite;}
+@keyframes blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.3)}}
 
-  /* ─── Layout ───────────────────────────────── */
-  main{padding:12px;display:grid;grid-template-columns:340px 1fr 1fr;gap:12px;}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;
-         padding:12px;overflow:auto;}
-  .panel h2{margin:0 0 10px;font-size:12px;letter-spacing:.6px;color:var(--muted);
-            text-transform:uppercase;padding-bottom:8px;border-bottom:1px solid var(--line);}
-  .panel h3{margin:14px 0 6px;font-size:11px;color:var(--accent);letter-spacing:.5px;text-transform:uppercase;}
+/* ── Flow diagram ── */
+.flow-wrap{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 20px 8px;}
+.flow-svg{width:100%;max-width:1200px;margin:0 auto;display:block;}
+.fnode rect{fill:#0b1526;stroke:var(--border2);stroke-width:1.5;rx:6;}
+.fnode.active rect{stroke:var(--ok);filter:drop-shadow(0 0 5px #10b98150);}
+.fnode.fail rect{stroke:var(--err);filter:drop-shadow(0 0 5px #ef444450);}
+.flabel{font:600 11px var(--font);fill:var(--txt);}
+.fproto{font:9.5px var(--mono);fill:var(--muted);}
+.frate{font:600 10px var(--mono);fill:var(--accent);}
+.fpipe{stroke:var(--border2);stroke-width:2;fill:none;}
+.fpipe.in-active{stroke:var(--in-clr);}
+.fpipe.out-active{stroke:var(--sa);}
+.pkt-in{fill:var(--in-clr);}
+.pkt-out{fill:var(--sa);}
 
-  label{display:block;margin:8px 0 3px;font-size:10px;color:var(--muted);
-        text-transform:uppercase;letter-spacing:.4px;}
-  input,select,textarea{width:100%;padding:6px 8px;background:#0b1426;color:var(--txt);
-                        border:1px solid var(--line);border-radius:4px;
-                        font-family:inherit;font-size:12px;}
-  textarea{font-family:Consolas,monospace;font-size:11px;resize:vertical;min-height:80px;}
-  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);}
-  button{background:var(--accent);color:#042f2e;border:none;padding:6px 10px;
-         border-radius:4px;cursor:pointer;font-weight:600;font-size:11px;margin-top:6px;width:100%;}
-  button:hover{filter:brightness(1.1);}
-  button.warn{background:var(--warn);color:#422006;}
-  button.err{background:var(--err);color:#fff;}
-  button.ghost{background:transparent;border:1px solid var(--line);color:var(--txt);}
+/* ── Type strip ── */
+.type-strip{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--border);}
+.type-card{padding:10px 16px;display:flex;align-items:center;gap:10px;border-right:1px solid var(--border);}
+.type-card:last-child{border-right:none;}
+.tc-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.tc-dot.ua{background:var(--ua);box-shadow:0 0 6px var(--ua);}
+.tc-dot.ka{background:var(--ka);box-shadow:0 0 6px var(--ka);}
+.tc-dot.sa{background:var(--sa);box-shadow:0 0 6px var(--sa);}
+.tc-dot.ga{background:var(--ga);box-shadow:0 0 6px var(--ga);}
+.tc-body{flex:1;}
+.tc-name{font-size:10px;font-weight:700;color:var(--txt);}
+.tc-num{font-size:24px;font-weight:800;line-height:1.1;font-family:var(--mono);margin-top:1px;}
+.tc-num.ua{color:var(--ua);}
+.tc-num.ka{color:var(--ka);}
+.tc-num.sa{color:var(--sa);}
+.tc-num.ga{color:var(--ga);}
+.tc-sub{font-size:9px;color:var(--muted);}
 
-  .toggle-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0;}
-  .row{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
-  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;}
-  .stat-grid div:nth-child(odd){color:var(--muted);}
+/* ── Config bar (horizontal compact) ── */
+.cfg-bar{background:var(--surface);border-bottom:1px solid var(--border);
+         padding:10px 16px;display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;}
+.cfg-group{display:flex;flex-direction:column;gap:5px;}
+.cfg-group-title{font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;}
+.cfg-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.cfg-lbl{font-size:10px;color:var(--muted);white-space:nowrap;}
+input[type=text],input[type=number],select,textarea{
+  padding:5px 8px;background:var(--card);color:var(--txt);
+  border:1px solid var(--border2);border-radius:5px;font-family:var(--font);font-size:12px;}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);}
+textarea{font-family:var(--mono);font-size:11px;resize:vertical;}
+.btn{padding:5px 12px;border:none;border-radius:5px;cursor:pointer;font-weight:700;font-size:11px;
+     white-space:nowrap;transition:filter .15s;}
+.btn:hover{filter:brightness(1.15);}
+.btn-a{background:var(--accent);color:#042f2e;}
+.btn-w{background:var(--warn);color:#422006;}
+.btn-p{background:#6d28d9;color:#ede9fe;}
+.btn-b{background:#1d4ed8;color:#dbeafe;}
+.btn-g{background:transparent;border:1px solid var(--border2);color:var(--txt);}
+.btn-err{background:var(--err);color:#fff;}
 
-  .msg-list{max-height:58vh;overflow-y:auto;}
-  .msg{padding:7px 9px;margin-bottom:5px;border-radius:5px;background:#0b1426;
-       border-left:3px solid var(--line);font-size:11px;}
-  .msg.in{border-left-color:var(--in);}
-  .msg.out.UpdateAlarm{border-left-color:#f59e0b;}
-  .msg.out.KeepAlive{border-left-color:#10b981;}
-  .msg.out.SendAllAlarms{border-left-color:#a78bfa;}
-  .msg-header{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-bottom:3px;}
-  .msg-body{font-family:Consolas,monospace;font-size:10px;word-break:break-all;white-space:pre-wrap;
-            color:#cbd5e1;max-height:140px;overflow-y:auto;}
-  .badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;
-         font-weight:700;text-transform:uppercase;background:#1e2a44;}
-  .badge.UpdateAlarm{background:#7c2d12;color:#fed7aa;}
-  .badge.KeepAlive{background:#064e3b;color:#bbf7d0;}
-  .badge.SendAllAlarms{background:#4c1d95;color:#e9d5ff;}
+.timer-group{display:flex;gap:6px;align-items:center;}
+.timer-cell{display:flex;flex-direction:column;gap:3px;align-items:center;
+            background:var(--card);border:1px solid var(--border);border-radius:6px;padding:6px 8px;min-width:90px;}
+.timer-cell-label{font-size:9px;font-weight:700;text-transform:uppercase;display:flex;align-items:center;gap:4px;}
+.tdot{width:6px;height:6px;border-radius:50%;}
+.tdot.ua{background:var(--ua);}
+.tdot.ka{background:var(--ka);}
+.tdot.sa{background:var(--sa);}
+.tdot.ga{background:var(--ga);}
+.timer-cell-row{display:flex;align-items:center;gap:4px;}
+.timer-cell-row input[type=number]{width:56px;}
+.timer-cell-row .ts{font-size:10px;color:var(--muted);}
+.timer-en{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--muted);}
 
-  table{width:100%;border-collapse:collapse;font-size:11px;}
-  th,td{padding:4px 7px;text-align:left;border-bottom:1px solid var(--line);}
-  th{color:var(--muted);font-weight:600;font-size:10px;text-transform:uppercase;}
-  td.state-0{color:var(--ok);}
-  td.state-1{color:var(--err);font-weight:700;}
+/* ── Two-box main area ── */
+.two-box{padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 
-  .footer-bar{grid-column:1/-1;padding:10px 14px;background:var(--panel);border:1px solid var(--line);
-              border-radius:8px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;
-              font-size:11px;color:var(--muted);align-items:center;}
-  .countdown{color:var(--accent);font-weight:700;font-family:Consolas,monospace;}
-  .topic{color:#93c5fd;font-family:Consolas,monospace;font-size:11px;}
+/* ── Message box ── */
+.mbox{background:var(--card);border:1px solid var(--border);border-radius:10px;
+      display:flex;flex-direction:column;overflow:hidden;min-height:0;}
+.mbox-hdr{padding:0;border-bottom:1px solid var(--border);display:flex;flex-direction:column;}
+.mbox-dir{display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;}
+.mbox-arrow{display:flex;align-items:center;gap:10px;}
+.mbox-arrowlbl{font-size:19px;font-weight:800;letter-spacing:-.5px;}
+.mbox-arrowlbl.in-dir{color:var(--in-clr);}
+.mbox-arrowlbl.out-dir{color:var(--sa);}
+.mbox-title{font-size:12px;font-weight:700;color:var(--txt);}
+.mbox-sub{font-size:10px;color:var(--muted);margin-top:1px;}
+.mbox-count{font-size:11px;color:var(--muted);font-family:var(--mono);}
+.mbox-tags{padding:0 14px 8px;display:flex;gap:5px;flex-wrap:wrap;}
+.badge{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:4px;
+       font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;}
+.badge.in           {background:#0d2d45;color:#38bdf8;}
+.badge.UpdateAlarm  {background:#451a03;color:#fde68a;}
+.badge.KeepAlive    {background:#022c22;color:#6ee7b7;}
+.badge.SendAllAlarms{background:#2e1065;color:#c4b5fd;}
+.badge.GetAllAlarms {background:#0c2a4a;color:#7dd3fc;}
+.mbox-body{padding:10px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:5px;max-height:52vh;}
+
+/* ── Empty state ── */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;
+             flex:1;padding:32px;color:var(--dim);text-align:center;gap:8px;}
+.empty-icon{font-size:28px;opacity:.4;}
+.empty-text{font-size:12px;}
+
+/* ── Message card ── */
+.msg{border-radius:6px;background:var(--surface);border-left:3px solid var(--border);
+     font-size:11px;overflow:hidden;flex-shrink:0;}
+.msg.in               {border-left-color:var(--in-clr);}
+.msg.out.UpdateAlarm  {border-left-color:var(--ua);}
+.msg.out.KeepAlive    {border-left-color:var(--ka);}
+.msg.out.SendAllAlarms{border-left-color:var(--sa);}
+.msg.out.GetAllAlarms {border-left-color:var(--ga);}
+.msg-row{display:flex;justify-content:space-between;align-items:center;padding:5px 9px 4px;gap:8px;}
+.msg-time{color:var(--muted);font-size:10px;font-family:var(--mono);white-space:nowrap;}
+.msg-body-txt{font-family:var(--mono);font-size:10px;color:#7a9ab8;
+              padding:0 9px 7px;max-height:100px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;}
+
+/* ── Bottom row ── */
+.bottom-row{padding:0 12px 12px;display:grid;grid-template-columns:1fr auto;gap:12px;}
+.alarm-box{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:auto;}
+.alarm-hdr{padding:8px 14px;border-bottom:1px solid var(--border);
+           font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;
+           display:flex;align-items:center;justify-content:space-between;}
+table{width:100%;border-collapse:collapse;font-size:11px;}
+th,td{padding:5px 10px;text-align:left;border-bottom:1px solid var(--border);}
+th{color:var(--dim);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;}
+td.s0{color:var(--ok);font-weight:700;}
+td.s1{color:var(--err);font-weight:700;}
+td.s2{color:var(--warn);}
+
+.status-bar{background:var(--card);border:1px solid var(--border);border-radius:10px;
+            padding:10px 14px;display:flex;flex-direction:column;gap:7px;min-width:220px;}
+.sb-title{font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;}
+.sb-item{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;}
+.sb-label{color:var(--muted);}
+.sb-val{color:var(--accent);font-weight:700;font-family:var(--mono);}
+.sb-val.ok{color:var(--ok);}
+.sb-val.warn{color:var(--warn);}
+.sb-val.err{color:var(--err);}
 </style>
 </head>
 <body>
 
-<header>
-  <h1>🛰 SCADA Simulator — Live Communication</h1>
-  <div style="display:flex;gap:6px;flex-wrap:wrap;">
-    <span class="pill"><span id="mqtt-dot" class="dot"></span>MQTT <span id="mqtt-txt">connecting…</span></span>
-    <span class="pill">CreatorId <b id="hdr-creator">-</b></span>
-    <span class="pill">TMS <span id="hdr-tms-status" style="margin-left:4px;">—</span></span>
+<!-- ── Header ── -->
+<header class="hdr">
+  <div>
+    <h1>SCADA Simulator — Live Dashboard</h1>
+    <p>Pink Line · Mock SCADA ↔ TMS · RSAE 4-type protocol over MQTT</p>
+  </div>
+  <div class="hdr-right">
+    <span class="pill"><span id="mqtt-dot" class="dot"></span>MQTT&nbsp;<span id="mqtt-txt">connecting…</span></span>
+    <span class="pill">Creator:&nbsp;<b id="hdr-creator" style="color:var(--accent)">—</b></span>
+    <span class="pill">TMS&nbsp;<span id="hdr-tms-status" style="font-weight:700">—</span></span>
   </div>
 </header>
 
-<!-- ════════════ FLOW DIAGRAM ════════════════════════ -->
-<div class="flow-diagram">
-  <svg class="flow-svg" viewBox="0 0 1200 150" xmlns="http://www.w3.org/2000/svg">
-    <!-- TMS node -->
-    <g id="node-tms" class="node" transform="translate(20,40)">
-      <rect width="170" height="70"/>
-      <text x="85" y="22" text-anchor="middle" class="hop-label">TMS Server</text>
-      <text x="85" y="38" text-anchor="middle" class="hop-proto">OpenWire :61616</text>
-      <text x="85" y="56" text-anchor="middle" class="hop-rate" id="rate-tms">— msg/s</text>
+<!-- ── Flow diagram — both directions ── -->
+<div class="flow-wrap">
+  <svg class="flow-svg" viewBox="0 0 1200 170" xmlns="http://www.w3.org/2000/svg">
+
+    <!-- Direction labels -->
+    <text x="10" y="15" style="font:700 10px var(--font);fill:#38bdf8;">▶ TMS → SCADA (inbound encrypted messages)</text>
+    <text x="10" y="155" style="font:700 10px var(--font);fill:#a78bfa;">◀ SCADA → TMS (UpdateAlarm · KeepAlive · SendAllAlarms · GetAllAlarms)</text>
+
+    <!-- ── Inbound row (top) ── -->
+    <!-- TMS Server -->
+    <g id="node-tms" class="fnode" transform="translate(10,22)">
+      <rect width="155" height="58" rx="6"/>
+      <text x="77" y="18" text-anchor="middle" class="flabel">TMS Server</text>
+      <text x="77" y="32" text-anchor="middle" class="fproto">OpenWire :61616</text>
+      <text x="77" y="47" text-anchor="middle" class="frate" id="rate-tms">— msg/s</text>
+    </g>
+    <!-- → Bridge -->
+    <path id="pipe-1" class="fpipe" d="M 165 51 L 255 51"/>
+    <g id="pkt-1" style="display:none"><circle class="pkt-in" r="4"><animateMotion dur="1.2s" repeatCount="indefinite" path="M 165 51 L 255 51"/></circle></g>
+    <text x="210" y="44" text-anchor="middle" style="font:8px var(--mono);fill:#38bdf8;">XML</text>
+
+    <!-- Bridge -->
+    <g class="fnode" transform="translate(255,22)">
+      <rect width="170" height="58" rx="6"/>
+      <text x="85" y="18" text-anchor="middle" class="flabel">Bridge</text>
+      <text x="85" y="32" text-anchor="middle" class="fproto">XML→JSON→AES-256-GCM</text>
+      <text x="85" y="47" text-anchor="middle" class="frate">Artemis→Kafka→RMQ</text>
+    </g>
+    <!-- → Kafka -->
+    <path id="pipe-2" class="fpipe" d="M 425 51 L 510 51"/>
+    <g id="pkt-2" style="display:none"><circle class="pkt-in" r="4"><animateMotion dur="1.2s" repeatCount="indefinite" path="M 425 51 L 510 51"/></circle></g>
+    <text x="467" y="44" text-anchor="middle" style="font:8px var(--mono);fill:#38bdf8;">encrypted</text>
+
+    <!-- Kafka -->
+    <g class="fnode" transform="translate(510,22)">
+      <rect width="150" height="58" rx="6"/>
+      <text x="75" y="18" text-anchor="middle" class="flabel">Kafka</text>
+      <text x="75" y="32" text-anchor="middle" class="fproto">tms.scada.encrypted</text>
+      <text x="75" y="47" text-anchor="middle" class="frate">byte[] store</text>
+    </g>
+    <!-- → RabbitMQ -->
+    <path id="pipe-3" class="fpipe" d="M 660 51 L 750 51"/>
+    <g id="pkt-3" style="display:none"><circle class="pkt-in" r="4"><animateMotion dur="1.2s" repeatCount="indefinite" path="M 660 51 L 750 51"/></circle></g>
+    <text x="705" y="44" text-anchor="middle" style="font:8px var(--mono);fill:#38bdf8;">AMQP</text>
+
+    <!-- RabbitMQ -->
+    <g class="fnode" transform="translate(750,22)">
+      <rect width="185" height="58" rx="6"/>
+      <text x="92" y="18" text-anchor="middle" class="flabel">RabbitMQ (SCADA VM)</text>
+      <text x="92" y="32" text-anchor="middle" class="fproto">AMQP 5673 · MQTT 1884</text>
+      <text x="92" y="47" text-anchor="middle" class="frate">amq.topic</text>
+    </g>
+    <!-- → SCADA -->
+    <path id="pipe-4" class="fpipe" d="M 935 51 L 1020 51"/>
+    <g id="pkt-4" style="display:none"><circle class="pkt-in" r="4"><animateMotion dur="1.2s" repeatCount="indefinite" path="M 935 51 L 1020 51"/></circle></g>
+    <text x="977" y="44" text-anchor="middle" style="font:8px var(--mono);fill:#38bdf8;">MQTT</text>
+
+    <!-- SCADA (this app) -->
+    <g id="node-scada" class="fnode" transform="translate(1020,22)">
+      <rect width="165" height="58" rx="6"/>
+      <text x="82" y="18" text-anchor="middle" class="flabel">SCADA API (this app)</text>
+      <text x="82" y="32" text-anchor="middle" class="fproto">Decrypt · Display · Publish</text>
+      <text x="82" y="47" text-anchor="middle" class="frate" id="rate-scada">— msg/s</text>
     </g>
 
-    <!-- pipe 1 (TMS → Bridge) -->
-    <path id="pipe-1" class="pipe" d="M 190 75 L 310 75"/>
-    <g id="packet-1" style="display:none;">
-      <circle class="packet" r="5"><animateMotion dur="1.5s" repeatCount="indefinite"
-        path="M 190 75 L 310 75"/></circle>
+    <!-- ── Outbound row (bottom) — SCADA → TMS ── -->
+    <!-- Return pipe: wide dashed purple arc -->
+    <path id="pipe-out" class="fpipe" d="M 1020 80 Q 600 118 165 80" stroke-dasharray="5 3"/>
+    <g id="pkt-out" style="display:none">
+      <circle class="pkt-out" r="4">
+        <animateMotion dur="2.2s" repeatCount="indefinite"
+          path="M 1020 80 Q 600 118 165 80"/>
+      </circle>
     </g>
-
-    <!-- Bridge node -->
-    <g id="node-bridge" class="node" transform="translate(310,40)">
-      <rect width="190" height="70"/>
-      <text x="95" y="22" text-anchor="middle" class="hop-label">Bridge (TMS VM)</text>
-      <text x="95" y="38" text-anchor="middle" class="hop-proto">XML→JSON→AES-GCM</text>
-      <text x="95" y="56" text-anchor="middle" class="hop-rate" id="rate-bridge">Artemis→Kafka→RMQ</text>
-    </g>
-
-    <!-- pipe 2 (Bridge → RabbitMQ) -->
-    <path id="pipe-2" class="pipe" d="M 500 75 L 620 75"/>
-    <g id="packet-2" style="display:none;">
-      <circle class="packet" r="5"><animateMotion dur="1.5s" repeatCount="indefinite"
-        path="M 500 75 L 620 75"/></circle>
-    </g>
-
-    <!-- RabbitMQ node -->
-    <g id="node-rmq" class="node" transform="translate(620,40)">
-      <rect width="180" height="70"/>
-      <text x="90" y="22" text-anchor="middle" class="hop-label">RabbitMQ (SCADA VM)</text>
-      <text x="90" y="38" text-anchor="middle" class="hop-proto">AMQP 5672 · MQTT 1883</text>
-      <text x="90" y="56" text-anchor="middle" class="hop-rate" id="rate-rmq">amq.topic</text>
-    </g>
-
-    <!-- pipe 3 (RabbitMQ → SCADA) -->
-    <path id="pipe-3" class="pipe" d="M 800 75 L 920 75"/>
-    <g id="packet-3" style="display:none;">
-      <circle class="packet" r="5"><animateMotion dur="1.5s" repeatCount="indefinite"
-        path="M 800 75 L 920 75"/></circle>
-    </g>
-
-    <!-- SCADA node -->
-    <g id="node-scada" class="node" transform="translate(920,40)">
-      <rect width="250" height="70"/>
-      <text x="125" y="22" text-anchor="middle" class="hop-label">Mock SCADA (this app)</text>
-      <text x="125" y="38" text-anchor="middle" class="hop-proto">Receives · Publishes · Keepalive</text>
-      <text x="125" y="56" text-anchor="middle" class="hop-rate" id="rate-scada">— msg/s</text>
-    </g>
-
-    <!-- Return pipe label -->
-    <path d="M 920 110 Q 600 135 310 110" class="pipe" stroke-dasharray="4 3"/>
-    <text x="615" y="148" text-anchor="middle" class="hop-proto"
-          id="return-label">SCADA → TMS  (MQTT scada/tms/alarms)</text>
+    <!-- Label on the arc -->
+    <text x="600" y="138" text-anchor="middle" style="font:9px var(--mono);fill:#a78bfa;">
+      scada/tms/alarms  ·  UpdateAlarm  ·  KeepAlive  ·  SendAllAlarms  ·  GetAllAlarms
+    </text>
   </svg>
 </div>
 
-<!-- ════════════ PANELS ════════════════════════ -->
-<main>
-
-  <!-- LEFT: Dynamic config -->
-  <section class="panel">
-    <h2>⚙ Live Configuration</h2>
-
-    <h3>Identity & Topics</h3>
-    <label>CreatorId</label>
-    <input type="text" id="cfg-creator" placeholder="ScateX">
-    <label>Topic IN (from TMS)</label>
-    <input type="text" id="cfg-topic-in" placeholder="tms/scada/pas">
-    <label>Topic OUT (to TMS)</label>
-    <input type="text" id="cfg-topic-out" placeholder="scada/tms/alarms">
-    <button onclick="saveIdentity()">Apply Identity & Topics</button>
-
-    <h3>Timers</h3>
-    <label>KeepAlive Interval (sec)</label>
-    <input type="number" id="cfg-ka" min="1" max="3600" value="30">
-    <label>Auto-alarm Interval (sec, 0=off)</label>
-    <input type="number" id="cfg-aa" min="0" max="3600" value="10">
-    <div class="toggle-row">
-      <span>Auto-alarm enabled</span>
-      <input type="checkbox" id="cfg-aa-en">
+<!-- ── Type counter strip ── -->
+<div class="type-strip">
+  <div class="type-card">
+    <div class="tc-dot ua"></div>
+    <div class="tc-body">
+      <div class="tc-name">UpdateAlarm</div>
+      <div class="tc-num ua" id="tc-ua">0</div>
+      <div class="tc-sub">Equipment state → TMS</div>
     </div>
-    <button onclick="saveTimers()">Apply Timers</button>
+  </div>
+  <div class="type-card">
+    <div class="tc-dot ka"></div>
+    <div class="tc-body">
+      <div class="tc-name">KeepAlive</div>
+      <div class="tc-num ka" id="tc-ka">0</div>
+      <div class="tc-sub">Heartbeat → TMS</div>
+    </div>
+  </div>
+  <div class="type-card">
+    <div class="tc-dot sa"></div>
+    <div class="tc-body">
+      <div class="tc-name">SendAllAlarms</div>
+      <div class="tc-num sa" id="tc-sa">0</div>
+      <div class="tc-sub">Full broadcast → TMS</div>
+    </div>
+  </div>
+  <div class="type-card">
+    <div class="tc-dot ga"></div>
+    <div class="tc-body">
+      <div class="tc-name">GetAllAlarms</div>
+      <div class="tc-num ga" id="tc-ga">0</div>
+      <div class="tc-sub">Request state from TMS</div>
+    </div>
+  </div>
+</div>
 
-    <h3>Connection</h3>
-    <button class="warn" id="pause-btn" onclick="togglePause()">Pause KeepAlive</button>
-    <button class="ghost" onclick="sendAll()">Send All Alarms</button>
+<!-- ── Compact Config Bar ── -->
+<div class="cfg-bar">
 
-    <h3>Manual Publish</h3>
-    <label>Alarm ID</label>
-    <select id="m-alarm-id"></select>
-    <label>State</label>
-    <select id="m-alarm-state">
-      <option value="0">0 — OFF / normal</option>
-      <option value="1">1 — ON / fault</option>
-      <option value="2">2 — maintenance</option>
-    </select>
-    <button onclick="publishManual()">Publish UpdateAlarm</button>
+  <!-- Identity -->
+  <div class="cfg-group">
+    <div class="cfg-group-title">Identity &amp; Topics</div>
+    <div class="cfg-row">
+      <span class="cfg-lbl">Creator</span>
+      <input type="text" id="cfg-creator" placeholder="ScateX" style="width:100px;">
+      <span class="cfg-lbl">Topic IN</span>
+      <input type="text" id="cfg-topic-in" placeholder="tms/scada/pas" style="width:130px;">
+      <span class="cfg-lbl">Topic OUT</span>
+      <input type="text" id="cfg-topic-out" placeholder="scada/tms/alarms" style="width:140px;">
+      <button class="btn btn-a" onclick="saveIdentity()">Apply</button>
+    </div>
+  </div>
 
-    <h3>Equipment List (one per line)</h3>
-    <textarea id="cfg-equipment" rows="6"></textarea>
-    <button onclick="saveEquipment()">Apply Equipment List</button>
+  <div style="width:1px;background:var(--border);align-self:stretch;"></div>
 
-    <h3>Stats</h3>
-    <div class="stat-grid" id="stats"></div>
-  </section>
+  <!-- Timers -->
+  <div class="cfg-group">
+    <div class="cfg-group-title">Auto-send Timers (seconds · 0 = off)</div>
+    <div class="cfg-row">
+      <div class="timer-cell">
+        <div class="timer-cell-label"><span class="tdot ua"></span><span style="color:var(--ua)">UpdateAlarm</span></div>
+        <div class="timer-cell-row">
+          <input type="number" id="cfg-aa" min="0" max="3600" value="10">
+          <span class="ts">s</span>
+        </div>
+        <div class="timer-en"><input type="checkbox" id="cfg-aa-en"> on</div>
+      </div>
+      <div class="timer-cell">
+        <div class="timer-cell-label"><span class="tdot ka"></span><span style="color:var(--ka)">KeepAlive</span></div>
+        <div class="timer-cell-row">
+          <input type="number" id="cfg-ka" min="1" max="3600" value="30">
+          <span class="ts">s</span>
+        </div>
+        <div class="timer-en"><input type="checkbox" id="cfg-ka-paused" onchange="togglePause(this)"> pause</div>
+      </div>
+      <div class="timer-cell">
+        <div class="timer-cell-label"><span class="tdot sa"></span><span style="color:var(--sa)">SendAllAlarms</span></div>
+        <div class="timer-cell-row">
+          <input type="number" id="cfg-sa" min="0" max="3600" value="60">
+          <span class="ts">s</span>
+        </div>
+        <div class="timer-en"><input type="checkbox" id="cfg-sa-en"> on</div>
+      </div>
+      <div class="timer-cell">
+        <div class="timer-cell-label"><span class="tdot ga"></span><span style="color:var(--ga)">GetAllAlarms</span></div>
+        <div class="timer-cell-row">
+          <input type="number" id="cfg-ga" min="0" max="3600" value="120">
+          <span class="ts">s</span>
+        </div>
+        <div class="timer-en"><input type="checkbox" id="cfg-ga-en"> on</div>
+      </div>
+      <button class="btn btn-a" onclick="saveTimers()" style="align-self:center;">Apply</button>
+    </div>
+  </div>
 
-  <!-- MIDDLE: Received -->
-  <section class="panel">
-    <h2>↙ Received FROM TMS (decrypted JSON)</h2>
-    <div class="msg-list" id="in-list"></div>
-  </section>
+  <div style="width:1px;background:var(--border);align-self:stretch;"></div>
 
-  <!-- RIGHT: Sent -->
-  <section class="panel">
-    <h2>↗ Sent TO TMS (RSAE · 4 types · 1 topic)</h2>
-    <div class="msg-list" id="out-list"></div>
-  </section>
+  <!-- Manual -->
+  <div class="cfg-group">
+    <div class="cfg-group-title">Manual Publish</div>
+    <div class="cfg-row">
+      <select id="m-alarm-id" style="width:140px;"></select>
+      <select id="m-alarm-state" style="width:140px;">
+        <option value="0">0 — OFF / normal</option>
+        <option value="1">1 — ON / fault</option>
+        <option value="2">2 — maintenance</option>
+      </select>
+      <button class="btn btn-w" onclick="publishManual()">UpdateAlarm</button>
+      <button class="btn btn-p" onclick="sendAll()">SendAll</button>
+      <button class="btn btn-b" onclick="sendGetAll()">GetAll</button>
+    </div>
+  </div>
 
-  <!-- Alarm state table -->
-  <section class="footer-bar" style="display:block;">
-    <h2 style="margin:0 0 8px;font-size:12px;color:var(--muted);text-transform:uppercase;">
-      📋 Current Alarm State
-    </h2>
+</div>
+
+<!-- ── TWO BOXES ── -->
+<div class="two-box">
+
+  <!-- BOX 1: TMS → SCADA (Received) -->
+  <div class="mbox">
+    <div class="mbox-hdr">
+      <div class="mbox-dir">
+        <div class="mbox-arrow">
+          <div style="font-size:28px;color:var(--in-clr);line-height:1;">&#8595;</div>
+          <div>
+            <div class="mbox-arrowlbl in-dir">TMS → SCADA</div>
+            <div class="mbox-sub">Encrypted messages received &amp; decrypted from broker MQTT</div>
+          </div>
+        </div>
+        <div class="mbox-count" id="rx-count">0 msgs</div>
+      </div>
+      <div class="mbox-tags">
+        <span class="badge in">TMS → SCADA</span>
+        <span style="font-size:10px;color:var(--dim);margin-left:4px;">topic: tms/scada/pas &nbsp;·&nbsp; AES-256-GCM decrypted</span>
+      </div>
+    </div>
+    <div class="mbox-body" id="in-list">
+      <div class="empty-state" id="in-empty">
+        <div class="empty-icon">&#8595;</div>
+        <div class="empty-text">Waiting for encrypted messages from TMS…<br>
+          <span style="font-size:10px;color:var(--dim)">Connects via MQTT topic tms/scada/pas</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOX 2: SCADA → TMS (Sent) -->
+  <div class="mbox">
+    <div class="mbox-hdr">
+      <div class="mbox-dir">
+        <div class="mbox-arrow">
+          <div style="font-size:28px;color:var(--sa);line-height:1;">&#8593;</div>
+          <div>
+            <div class="mbox-arrowlbl out-dir">SCADA → TMS</div>
+            <div class="mbox-sub">RSAE messages published on single topic — 4 types</div>
+          </div>
+        </div>
+        <div class="mbox-count" id="tx-count">0 msgs</div>
+      </div>
+      <div class="mbox-tags">
+        <span class="badge UpdateAlarm">UpdateAlarm</span>
+        <span class="badge KeepAlive">KeepAlive</span>
+        <span class="badge SendAllAlarms">SendAllAlarms</span>
+        <span class="badge GetAllAlarms">GetAllAlarms</span>
+      </div>
+    </div>
+    <div class="mbox-body" id="out-list">
+      <div class="empty-state" id="out-empty">
+        <div class="empty-icon">&#8593;</div>
+        <div class="empty-text">No messages published yet…<br>
+          <span style="font-size:10px;color:var(--dim)">Timers will fire once MQTT connects</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Bottom row: Alarm table + Status ── -->
+<div class="bottom-row">
+
+  <div class="alarm-box">
+    <div class="alarm-hdr">
+      <span>Current Alarm State Table</span>
+      <span id="alarm-count" style="color:var(--accent);font-family:var(--mono);">0 tracked</span>
+    </div>
     <table id="alarm-table">
       <thead><tr><th>Alarm ID</th><th>State</th><th>Last Updated</th></tr></thead>
       <tbody></tbody>
     </table>
-  </section>
+  </div>
 
-  <!-- Status bar -->
-  <section class="footer-bar">
-    <span>Last TMS msg: <b id="last-in">—</b></span>
-    <span>Last KA sent: <b id="last-ka">—</b></span>
-    <span>Next KA in: <span class="countdown" id="next-ka">—</span></span>
-    <span>TMS silent: <span class="countdown" id="tms-silence">—</span></span>
-    <span>Rate IN: <span class="countdown" id="rate-in-lbl">0</span>/s</span>
-    <span>Rate OUT: <span class="countdown" id="rate-out-lbl">0</span>/s</span>
-    <label style="display:inline-flex;align-items:center;gap:4px;margin:0;">
-      TMS timeout (s)
-      <input type="number" id="tms-timeout" value="90" min="10" max="600" style="width:70px;">
-    </label>
-  </section>
+  <div class="status-bar">
+    <div class="sb-title">Live Status</div>
+    <div class="sb-item"><span class="sb-label">Last TMS msg</span><span class="sb-val" id="last-in">—</span></div>
+    <div class="sb-item"><span class="sb-label">Last KA sent</span><span class="sb-val" id="last-ka">—</span></div>
+    <div class="sb-item"><span class="sb-label">Next KA in</span><span class="sb-val" id="next-ka">—</span></div>
+    <div class="sb-item"><span class="sb-label">TMS silent</span><span class="sb-val" id="tms-silence">—</span></div>
+    <div class="sb-item"><span class="sb-label">Rate IN</span><span class="sb-val" id="rate-in-lbl">0</span><span style="color:var(--muted);font-size:10px;">/s</span></div>
+    <div class="sb-item"><span class="sb-label">Rate OUT</span><span class="sb-val" id="rate-out-lbl">0</span><span style="color:var(--muted);font-size:10px;">/s</span></div>
+    <div class="sb-item">
+      <span class="sb-label">TMS timeout</span>
+      <input type="number" id="tms-timeout" value="90" min="10" max="600" style="width:56px;">
+      <span style="color:var(--muted);font-size:10px;">s</span>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:7px;margin-top:2px;">
+      <div class="sb-title" style="margin-bottom:5px;">Session Stats</div>
+      <div class="sb-item"><span class="sb-label">Received</span><span class="sb-val" id="st-rx">0</span></div>
+      <div class="sb-item"><span class="sb-label" style="color:var(--ua)">UpdateAlarm</span><span class="sb-val" id="st-ua">0</span></div>
+      <div class="sb-item"><span class="sb-label" style="color:var(--ka)">KeepAlive</span><span class="sb-val" id="st-ka">0</span></div>
+      <div class="sb-item"><span class="sb-label" style="color:var(--sa)">SendAllAlarms</span><span class="sb-val" id="st-sa">0</span></div>
+      <div class="sb-item"><span class="sb-label" style="color:var(--ga)">GetAllAlarms</span><span class="sb-val" id="st-ga">0</span></div>
+      <div class="sb-item"><span class="sb-label">Decrypt OK</span><span class="sb-val ok" id="st-dok">0</span></div>
+      <div class="sb-item"><span class="sb-label">Decrypt Fail</span><span class="sb-val err" id="st-dfail">0</span></div>
+    </div>
+    <!-- Equipment list (compact) -->
+    <div style="border-top:1px solid var(--border);padding-top:7px;margin-top:2px;">
+      <div class="sb-title" style="margin-bottom:5px;">Equipment List</div>
+      <textarea id="cfg-equipment" rows="4" style="width:100%;font-size:10px;"></textarea>
+      <button class="btn btn-g" onclick="saveEquipment()" style="width:100%;margin-top:4px;font-size:10px;">Apply Equipment</button>
+    </div>
+  </div>
 
-</main>
+</div>
 
 <script>
-let runtime = {};
-let metrics = {};
-let lastKAtime = null;
-
-const $ = (id) => document.getElementById(id);
+let runtime = {}, metrics = {}, lastKAtime = null;
+let rxCount = 0, txCount = 0;
+const $ = id => document.getElementById(id);
 
 async function fetchStatus(){
-  const r = await fetch('/api/status'); const s = await r.json();
-  renderStatus(s);
+  try{ const s = await (await fetch('/api/status')).json(); renderStatus(s); }catch(e){}
 }
-
 async function fetchMetrics(){
-  try{
-    const r = await fetch('/api/metrics'); metrics = await r.json();
-    renderMetrics();
-  } catch(e){}
+  try{ metrics = await (await fetch('/api/metrics')).json(); renderMetrics(); }catch(e){}
 }
 
 function renderStatus(s){
   runtime = s.runtime || {};
+
+  // Header
   $('mqtt-dot').className = 'dot ' + (runtime.mqtt_connected ? 'on pulse' : 'off');
   $('mqtt-txt').textContent = runtime.mqtt_connected ? 'connected' : 'offline';
-  $('hdr-creator').textContent = runtime.creator_id || '-';
+  $('hdr-creator').textContent = runtime.creator_id || '—';
 
-  $('cfg-creator').value   = runtime.creator_id   || '';
-  $('cfg-topic-in').value  = runtime.topic_in     || '';
-  $('cfg-topic-out').value = runtime.topic_out    || '';
-  $('cfg-ka').value        = runtime.keepalive_seconds;
-  $('cfg-aa').value        = runtime.auto_alarm_seconds;
-  $('cfg-aa-en').checked   = runtime.auto_alarm_enabled;
-  $('cfg-equipment').value = (runtime.equipment || []).join('\n');
+  // Config
+  $('cfg-creator').value     = runtime.creator_id || '';
+  $('cfg-topic-in').value    = runtime.topic_in   || '';
+  $('cfg-topic-out').value   = runtime.topic_out  || '';
+  $('cfg-ka').value          = runtime.keepalive_seconds  || 30;
+  $('cfg-aa').value          = runtime.auto_alarm_seconds || 10;
+  $('cfg-aa-en').checked     = !!runtime.auto_alarm_enabled;
+  $('cfg-sa').value          = runtime.send_all_alarms_seconds || 60;
+  $('cfg-sa-en').checked     = !!runtime.send_all_alarms_enabled;
+  $('cfg-ga').value          = runtime.get_all_alarms_seconds  || 120;
+  $('cfg-ga-en').checked     = !!runtime.get_all_alarms_enabled;
+  $('cfg-ka-paused').checked = !!runtime.keepalive_paused;
+  $('cfg-equipment').value   = (runtime.equipment || []).join('\n');
 
-  const pb = $('pause-btn');
-  pb.textContent = runtime.keepalive_paused ? '▶ Resume KeepAlive' : '⏸ Pause KeepAlive (simulate cut)';
-  pb.className = runtime.keepalive_paused ? 'err' : 'warn';
-
-  $('last-in').textContent = runtime.last_tms_received || '—';
-  $('last-ka').textContent = runtime.last_keepalive_sent || '—';
-  lastKAtime = runtime.last_keepalive_sent ? new Date(runtime.last_keepalive_sent) : null;
-
-  // rebuild equipment dropdown for manual publish
-  const sel = $('m-alarm-id'); const cur = sel.value;
-  sel.innerHTML='';
+  // Equipment dropdown
+  const sel = $('m-alarm-id'), cur = sel.value;
+  sel.innerHTML = '';
   (runtime.equipment || []).forEach(e => {
-    const o=document.createElement('option'); o.value=e; o.text=e; sel.appendChild(o);
+    const o = document.createElement('option'); o.value = o.text = e; sel.appendChild(o);
   });
   if(cur) sel.value = cur;
 
-  // stats
-  const g = $('stats'); g.innerHTML = '';
-  const st = {
-    "Received": s.stats.received,
-    "Sent (alarm)": s.stats.sent_alarm,
-    "Sent (KA)": s.stats.sent_ka,
-    "Sent (All)": s.stats.sent_all,
-    "Decrypt OK": s.stats.decrypt_ok,
-    "Decrypt Fail": s.stats.decrypt_fail,
-    "Tracked": s.alarmCount,
-  };
-  Object.entries(st).forEach(([k,v]) => {
-    g.innerHTML += `<div>${k}</div><div style="text-align:right;"><b>${v}</b></div>`;
-  });
+  $('last-in').textContent = fmt(runtime.last_tms_received);
+  $('last-ka').textContent = fmt(runtime.last_keepalive_sent);
+  lastKAtime = runtime.last_keepalive_sent ? new Date(runtime.last_keepalive_sent) : null;
+
+  // Type counters
+  $('tc-ua').textContent = s.stats.sent_alarm   || 0;
+  $('tc-ka').textContent = s.stats.sent_ka      || 0;
+  $('tc-sa').textContent = s.stats.sent_all     || 0;
+  $('tc-ga').textContent = s.stats.sent_get_all || 0;
+
+  // Stats sidebar
+  $('st-rx').textContent    = s.stats.received     || 0;
+  $('st-ua').textContent    = s.stats.sent_alarm   || 0;
+  $('st-ka').textContent    = s.stats.sent_ka      || 0;
+  $('st-sa').textContent    = s.stats.sent_all     || 0;
+  $('st-ga').textContent    = s.stats.sent_get_all || 0;
+  $('st-dok').textContent   = s.stats.decrypt_ok   || 0;
+  $('st-dfail').textContent = s.stats.decrypt_fail || 0;
+  $('alarm-count').textContent = (s.alarmCount || 0) + ' tracked';
 }
 
 function renderMetrics(){
-  $('rate-in-lbl').textContent  = (metrics.rate_in_per_sec || 0).toFixed(2);
+  $('rate-in-lbl').textContent  = (metrics.rate_in_per_sec  || 0).toFixed(2);
   $('rate-out-lbl').textContent = (metrics.rate_out_per_sec || 0).toFixed(2);
-  $('rate-tms').textContent   = (metrics.rate_in_per_sec || 0).toFixed(2)  + ' msg/s';
-  $('rate-scada').textContent = (metrics.rate_out_per_sec || 0).toFixed(2) + ' msg/s';
+  $('rate-tms').textContent     = (metrics.rate_in_per_sec  || 0).toFixed(2) + ' msg/s';
+  $('rate-scada').textContent   = (metrics.rate_out_per_sec || 0).toFixed(2) + ' msg/s';
 
-  // Active nodes/pipes
   const active = metrics.mqtt_connected;
-  document.querySelectorAll('.node').forEach(n => n.classList.toggle('active', active));
-  document.querySelectorAll('.pipe').forEach(p => p.classList.toggle('active', active && (metrics.rate_in_per_sec>0 || metrics.rate_out_per_sec>0)));
-
-  // Show animated packets when rate > 0
-  $('packet-1').style.display = (metrics.rate_in_per_sec  > 0) ? 'block' : 'none';
-  $('packet-2').style.display = (metrics.rate_in_per_sec  > 0) ? 'block' : 'none';
-  $('packet-3').style.display = (metrics.rate_out_per_sec > 0) ? 'block' : 'none';
+  document.querySelectorAll('.fnode').forEach(n => n.classList.toggle('active', !!active));
+  const flowing = active && (metrics.rate_in_per_sec > 0 || metrics.rate_out_per_sec > 0);
+  const inFlow  = active && metrics.rate_in_per_sec  > 0;
+  const outFlow = active && metrics.rate_out_per_sec > 0;
+  ['pipe-1','pipe-2','pipe-3','pipe-4'].forEach(id => {
+    const el = $(id); if(el){ el.classList.toggle('in-active', inFlow); el.classList.remove('out-active'); }
+  });
+  const po = $('pipe-out'); if(po) po.classList.toggle('out-active', outFlow);
+  for(let i=1;i<=4;i++) { const p=$('pkt-'+i); if(p) p.style.display=inFlow?'block':'none'; }
+  const po2=$('pkt-out'); if(po2) po2.style.display=outFlow?'block':'none';
 }
 
+// ── API ──
+function ct(){ return {'Content-Type':'application/json'}; }
 async function saveIdentity(){
-  const body = {
-    creator_id: $('cfg-creator').value.trim(),
-    topic_in:   $('cfg-topic-in').value.trim(),
-    topic_out:  $('cfg-topic-out').value.trim(),
-  };
-  await fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-  flashOK(); fetchStatus();
+  await fetch('/api/config',{method:'POST',headers:ct(),body:JSON.stringify({
+    creator_id:$('cfg-creator').value.trim(),
+    topic_in:$('cfg-topic-in').value.trim(),
+    topic_out:$('cfg-topic-out').value.trim()
+  })});
+  flash(); fetchStatus();
 }
 async function saveTimers(){
-  const body = {
-    keepalive_seconds:  Number($('cfg-ka').value),
-    auto_alarm_seconds: Number($('cfg-aa').value),
-    auto_alarm_enabled: $('cfg-aa-en').checked,
-  };
-  await fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-  flashOK(); fetchStatus();
+  await fetch('/api/config',{method:'POST',headers:ct(),body:JSON.stringify({
+    keepalive_seconds:       Number($('cfg-ka').value),
+    auto_alarm_seconds:      Number($('cfg-aa').value),
+    auto_alarm_enabled:      $('cfg-aa-en').checked,
+    send_all_alarms_seconds: Number($('cfg-sa').value),
+    send_all_alarms_enabled: $('cfg-sa-en').checked,
+    get_all_alarms_seconds:  Number($('cfg-ga').value),
+    get_all_alarms_enabled:  $('cfg-ga-en').checked,
+  })});
+  flash(); fetchStatus();
 }
 async function saveEquipment(){
   const list = $('cfg-equipment').value.split('\n').map(s=>s.trim()).filter(Boolean);
-  await fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({equipment:list})});
-  flashOK(); fetchStatus();
+  await fetch('/api/config',{method:'POST',headers:ct(),body:JSON.stringify({equipment:list})});
+  flash(); fetchStatus();
 }
-async function togglePause(){
-  const url = runtime.keepalive_paused ? '/api/resume' : '/api/pause';
-  await fetch(url, {method:'POST'}); fetchStatus();
+async function togglePause(cb){
+  await fetch(cb.checked?'/api/pause':'/api/resume',{method:'POST'}); fetchStatus();
 }
-async function sendAll(){ await fetch('/api/sendall', {method:'POST'}); }
+async function sendAll()   { await fetch('/api/sendall',{method:'POST'}); }
+async function sendGetAll(){ await fetch('/api/getall', {method:'POST'}); }
 async function publishManual(){
-  const id = $('m-alarm-id').value, state = $('m-alarm-state').value;
-  await fetch('/api/publish', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id,state})});
+  const id=$('m-alarm-id').value, state=$('m-alarm-state').value;
+  await fetch('/api/publish',{method:'POST',headers:ct(),body:JSON.stringify({id,state})});
+}
+function flash(){
+  document.body.style.transition='background .1s';
+  document.body.style.background='#0f2040';
+  setTimeout(()=>document.body.style.background='',180);
 }
 
-function flashOK(){ document.body.style.transition='background .12s'; document.body.style.background='#15294d'; setTimeout(()=>document.body.style.background='',150);}
-
+// ── Render messages ──
 function renderInMsg(m){
-  const list = $('in-list'); const div = document.createElement('div'); div.className='msg in';
-  const decoded = m.decoded ? JSON.stringify(m.decoded,null,2) : (m.error ? 'DECRYPT ERROR: '+m.error : '(binary)');
-  div.innerHTML = `<div class="msg-header"><span>#${m.id} · ${m.topic}</span><span>${new Date(m.receivedAt).toLocaleTimeString()}</span></div><div class="msg-body">${esc(decoded)}</div>`;
-  list.insertBefore(div, list.firstChild);
-  while(list.children.length > 50) list.removeChild(list.lastChild);
+  rxCount++;
+  $('rx-count').textContent = rxCount + ' msgs';
+  const empty = $('in-empty'); if(empty) empty.style.display='none';
+  const list = $('in-list');
+  const body = m.decoded ? JSON.stringify(m.decoded,null,2) : (m.error?'DECRYPT ERROR: '+m.error:'(binary)');
+  const div = document.createElement('div');
+  div.className = 'msg in';
+  div.innerHTML =
+    `<div class="msg-row">
+       <span class="badge in">TMS→SCADA</span>
+       <span style="color:var(--dim);font-size:10px;font-family:var(--mono)">#${m.id} · ${m.topic}</span>
+       <span class="msg-time">${fmt(m.receivedAt)}</span>
+     </div>
+     <div class="msg-body-txt">${esc(body)}</div>`;
+  list.insertBefore(div, list.children[1] || null);
+  while(list.children.length > 62) list.removeChild(list.lastChild);
 }
-function renderOutMsg(m){
-  const list = $('out-list'); const div = document.createElement('div');
-  const type = m.envelope.Type || 'Unknown';
-  div.className = `msg out ${type}`;
-  div.innerHTML = `<div class="msg-header"><span><span class="badge ${type}">${type}</span> · ${m.topic}</span><span>${new Date(m.sentAt).toLocaleTimeString()}</span></div><div class="msg-body">${esc(JSON.stringify(m.envelope,null,2))}</div>`;
-  list.insertBefore(div, list.firstChild);
-  while(list.children.length > 50) list.removeChild(list.lastChild);
-}
-function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 
+function renderOutMsg(m){
+  txCount++;
+  $('tx-count').textContent = txCount + ' msgs';
+  const empty = $('out-empty'); if(empty) empty.style.display='none';
+  const list = $('out-list');
+  const type = m.envelope?.Type || m.kind || 'Unknown';
+  const div = document.createElement('div');
+  div.className = `msg out ${type}`;
+  div.innerHTML =
+    `<div class="msg-row">
+       <span class="badge ${type}">${type}</span>
+       <span style="color:var(--dim);font-size:10px;font-family:var(--mono)">${m.topic}</span>
+       <span class="msg-time">${fmt(m.sentAt)}</span>
+     </div>
+     <div class="msg-body-txt">${esc(JSON.stringify(m.envelope,null,2))}</div>`;
+  list.insertBefore(div, list.children[1] || null);
+  while(list.children.length > 62) list.removeChild(list.lastChild);
+}
+
+function esc(s){ return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function fmt(iso){ return iso ? new Date(iso).toLocaleTimeString() : '—'; }
+
+// ── Alarms ──
 async function fetchAlarms(){
   try{
-    const r = await fetch('/api/alarms'); const rows = await r.json();
-    const tb = document.querySelector('#alarm-table tbody'); tb.innerHTML='';
+    const rows = await (await fetch('/api/alarms')).json();
+    const tb = document.querySelector('#alarm-table tbody');
+    tb.innerHTML = '';
     rows.forEach(a=>{
+      const cls = (a.State==='0'||a.State===0)?'s0':(a.State==='2'||a.State===2)?'s2':'s1';
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${a.Id}</td><td class="state-${a.State}">${a.State}</td><td>${a.Timestamp}</td>`;
+      tr.innerHTML = `<td>${a.Id}</td><td class="${cls}">${a.State}</td><td style="color:var(--muted)">${a.Timestamp}</td>`;
       tb.appendChild(tr);
     });
-  } catch(e){}
+    $('alarm-count').textContent = rows.length + ' tracked';
+  }catch(e){}
 }
 
+// ── Historical load ──
 async function loadInitial(){
-  const [rI, rO] = await Promise.all([fetch('/api/received'), fetch('/api/sent')]);
-  const inL = await rI.json(), outL = await rO.json();
-  inL.slice().reverse().forEach(renderInMsg);
-  outL.slice().reverse().forEach(renderOutMsg);
+  try{
+    const [rI,rO] = await Promise.all([fetch('/api/received'),fetch('/api/sent')]);
+    const inL = await rI.json(), outL = await rO.json();
+    inL.slice().reverse().forEach(renderInMsg);
+    outL.slice().reverse().forEach(renderOutMsg);
+  }catch(e){}
 }
 
-// Countdown + TMS silence watchdog
-setInterval(() => {
-  if (runtime.keepalive_seconds){
-    if (runtime.keepalive_paused) $('next-ka').textContent = 'PAUSED';
-    else if (!lastKAtime) $('next-ka').textContent = '—';
-    else {
-      const el = (Date.now() - lastKAtime.getTime())/1000;
-      $('next-ka').textContent = Math.max(0, runtime.keepalive_seconds - el).toFixed(1) + 's';
+// ── Countdown ──
+setInterval(()=>{
+  if(runtime.keepalive_seconds){
+    if(runtime.keepalive_paused){
+      $('next-ka').textContent='PAUSED'; $('next-ka').className='sb-val warn';
+    } else if(!lastKAtime){
+      $('next-ka').textContent='—';
+    } else {
+      const rem = Math.max(0, runtime.keepalive_seconds - (Date.now()-lastKAtime.getTime())/1000);
+      $('next-ka').textContent = rem.toFixed(1)+'s';
+      $('next-ka').className = 'sb-val ' + (rem<5?'warn':'');
     }
   }
-  const timeoutSec = Number($('tms-timeout').value) || 90;
-  const el = $('tms-silence');
-  const statusTxt = $('hdr-tms-status');
-
-  if (!runtime.last_tms_received){
-    el.textContent='never';el.style.color='var(--muted)';
-    statusTxt.textContent='—';statusTxt.style.color='';
-    return;
+  const timeout = Number($('tms-timeout').value)||90;
+  const silEl = $('tms-silence'), tmsEl = $('hdr-tms-status');
+  if(!runtime.last_tms_received){
+    silEl.textContent='never'; silEl.className='sb-val';
+    tmsEl.textContent='—'; tmsEl.style.color='';
+    document.getElementById('node-tms')?.classList.remove('fail'); return;
   }
-  const sec = (Date.now() - new Date(runtime.last_tms_received).getTime())/1000;
-  el.textContent = sec.toFixed(1)+'s';
-  if (sec > timeoutSec){
-    el.style.color='var(--err)';
-    statusTxt.textContent='LOST'; statusTxt.style.color='var(--err)';
-    document.getElementById('node-tms').classList.add('fail');
-  } else if (sec > timeoutSec*0.7){
-    el.style.color='var(--warn)';
-    statusTxt.textContent='WARN'; statusTxt.style.color='var(--warn)';
-    document.getElementById('node-tms').classList.remove('fail');
+  const sec = (Date.now()-new Date(runtime.last_tms_received).getTime())/1000;
+  silEl.textContent = sec.toFixed(1)+'s';
+  if(sec>timeout){
+    silEl.className='sb-val err'; tmsEl.textContent='LOST'; tmsEl.style.color='var(--err)';
+    document.getElementById('node-tms')?.classList.add('fail');
+  } else if(sec>timeout*.7){
+    silEl.className='sb-val warn'; tmsEl.textContent='WARN'; tmsEl.style.color='var(--warn)';
+    document.getElementById('node-tms')?.classList.remove('fail');
   } else {
-    el.style.color='var(--ok)';
-    statusTxt.textContent='OK'; statusTxt.style.color='var(--ok)';
-    document.getElementById('node-tms').classList.remove('fail');
+    silEl.className='sb-val ok'; tmsEl.textContent='OK'; tmsEl.style.color='var(--ok)';
+    document.getElementById('node-tms')?.classList.remove('fail');
   }
-}, 200);
+},200);
 
-// SSE stream
+// ── SSE ──
 const es = new EventSource('/api/stream');
-es.onmessage = (e) => {
+es.onmessage = e => {
   const msg = JSON.parse(e.data);
-  if (msg.type === 'received') renderInMsg(msg.payload);
-  else if (msg.type === 'sent'){
+  if(msg.type==='received') renderInMsg(msg.payload);
+  else if(msg.type==='sent'){
     renderOutMsg(msg.payload);
-    if (msg.payload.kind === 'KeepAlive') lastKAtime = new Date(msg.payload.sentAt);
+    if(msg.payload.kind==='KeepAlive') lastKAtime=new Date(msg.payload.sentAt);
   }
-  else if (msg.type === 'config' || msg.type === 'connection') fetchStatus();
+  else if(msg.type==='config'||msg.type==='connection') fetchStatus();
 };
+es.onerror=()=>{};
 
-// Init
+// ── Init ──
 fetchStatus(); loadInitial(); fetchAlarms(); fetchMetrics();
 setInterval(fetchStatus, 3000);
 setInterval(fetchAlarms, 2000);
 setInterval(fetchMetrics, 1000);
 </script>
-
 </body>
 </html>
