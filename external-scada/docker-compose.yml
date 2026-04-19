@@ -54,7 +54,7 @@ services:
       rabbitmq:
         condition: service_healthy   # wait until RabbitMQ is actually ready
     ports:
-      - "8090:8090"
+      - "8091:8090"
     environment:
       MQTT_HOST: rabbitmq
       MQTT_PORT: "1883"
