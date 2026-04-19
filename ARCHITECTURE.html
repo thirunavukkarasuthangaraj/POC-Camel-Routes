@@ -150,7 +150,39 @@
       Bidirectional Flow &mdash; TMS VM (10.4.0.23) ↔ SCADA VM (10.4.0.25)
     </div>
     <div style="padding:20px;background:#f8fafc;">
-    <div style="display:flex;flex-direction:column;gap:0;min-width:1100px;overflow-x:auto;">
+    <div style="display:flex;gap:16px;align-items:stretch;min-width:1320px;overflow-x:auto;">
+
+      <!-- ══ LEFT STANDALONE COLUMN — Thales.EPS.ExternalSystems ══ -->
+      <div style="width:230px;flex-shrink:0;display:flex;flex-direction:column;">
+        <div class="comp" style="border:2px solid #f97316;border-radius:12px;overflow:hidden;flex:1;">
+          <div class="comp-head" style="background:#ea580c;padding:10px 8px;">
+            Thales.EPS.ExternalSystems
+            <div style="font-size:7px;font-weight:400;opacity:.85;margin-top:2px;">Electrical Power System &middot; external</div>
+          </div>
+          <div class="comp-body" style="display:flex;flex-direction:column;gap:8px;">
+            <div class="sub">third-party downstream consumer</div>
+            <div class="sub">subscribes to TMS + SCADA streams</div>
+            <hr style="border:none;border-top:1px solid #f1f5f9;margin:2px 0"/>
+
+            <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:7px 9px;">
+              <div style="font-size:8.5px;font-weight:800;color:#1d4ed8;margin-bottom:4px;">&#x25C0; FROM TMS</div>
+              <div><span class="tag tag-blue">Artemis: TMS.EPS.Info</span></div>
+              <div class="sub" style="margin-top:3px;">power-system commands</div>
+              <div class="sub">substation status updates</div>
+            </div>
+
+            <div style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:6px;padding:7px 9px;">
+              <div style="font-size:8.5px;font-weight:800;color:#0f766e;margin-bottom:4px;">&#x25C0; FROM SCADA</div>
+              <div><span class="tag tag-teal">RabbitMQ key: eps.alarms</span></div>
+              <div class="sub" style="margin-top:3px;">equipment alarms (RSAE)</div>
+              <div class="sub">power-trip notifications</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ RIGHT MAIN COLUMN — TMS VM + Connector + SCADA VM ══ -->
+      <div style="flex:1;display:flex;flex-direction:column;gap:0;min-width:0;">
 
       <!-- ══ TMS VM ZONE ══ -->
       <div class="zone zone-tms">
@@ -256,45 +288,9 @@
         </div>
       </div>
 
-      <!-- ══ MIDDLE ROW — Thales.EPS on LEFT, connectors on RIGHT ══ -->
-      <div style="display:flex;align-items:center;gap:24px;padding:10px 0;min-width:1100px;">
-
-        <!-- ── LEFT: Thales.EPS.ExternalSystems box ── -->
-        <div class="comp" style="width:300px;border-color:#fed7aa;flex-shrink:0;">
-          <div class="comp-head" style="background:#ea580c;">
-            Thales.EPS.ExternalSystems
-            <div style="font-size:7px;font-weight:400;opacity:.85;margin-top:1px;">Electrical Power System &middot; external</div>
-          </div>
-          <div class="comp-body">
-            <div class="sub">downstream consumer &middot; receives from TMS + SCADA</div>
-            <hr style="border:none;border-top:1px solid #f1f5f9;margin:5px 0"/>
-            <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;padding:5px 8px;margin-bottom:5px;">
-              <div style="font-size:8px;font-weight:700;color:#1d4ed8;margin-bottom:2px;">&#x25C0; FROM TMS</div>
-              <div><span class="tag tag-blue">Artemis: TMS.EPS.Info</span></div>
-              <div class="sub">power-system commands &middot; substation status</div>
-            </div>
-            <div style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:5px;padding:5px 8px;">
-              <div style="font-size:8px;font-weight:700;color:#0f766e;margin-bottom:2px;">&#x25C0; FROM SCADA</div>
-              <div><span class="tag tag-teal">RabbitMQ key: eps.alarms</span></div>
-              <div class="sub">equipment alarms &middot; power-trip notifications</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- ── Arrows from TMS/SCADA → Thales.EPS ── -->
-        <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0;">
-          <div style="display:flex;align-items:center;gap:4px;">
-            <svg width="36" height="10"><line x1="36" y1="5" x2="4" y2="5" stroke="#3b82f6" stroke-width="2"/><polygon points="8,2 0,5 8,8" fill="#3b82f6"/></svg>
-            <span style="font-size:7px;font-weight:700;color:#3b82f6;">from TMS</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:4px;">
-            <svg width="36" height="10"><line x1="36" y1="5" x2="4" y2="5" stroke="#14b8a6" stroke-width="2"/><polygon points="8,2 0,5 8,8" fill="#14b8a6"/></svg>
-            <span style="font-size:7px;font-weight:700;color:#14b8a6;">from SCADA</span>
-          </div>
-        </div>
-
-        <!-- ── RIGHT: Existing AMQP/MQTT connector lines ── -->
-        <div style="display:flex;flex-direction:column;gap:10px;flex:1;align-items:center;">
+      <!-- ══ CONNECTOR BETWEEN ZONES ══ -->
+      <div class="connector">
+        <div class="conn-line">
           <div style="display:flex;align-items:center;gap:8px;">
             <span class="conn-badge" style="background:#4f46e5;color:#e0e7ff;">AMQP &nbsp;5673</span>
             <div>
@@ -308,6 +304,8 @@
               </div>
             </div>
           </div>
+        </div>
+        <div class="conn-line">
           <div style="display:flex;align-items:center;gap:8px;">
             <span class="conn-badge" style="background:#0e7490;color:#cffafe;">MQTT &nbsp;1884</span>
             <div>
@@ -392,6 +390,8 @@
 
         </div>
       </div>
+
+      </div><!-- end right main column -->
 
     </div>
     </div>
