@@ -57,8 +57,8 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 # ── Config (env + runtime-mutable) ─────────────────────────────────────
 MQTT_HOST  = os.getenv("MQTT_HOST",  "10.4.0.10")
 MQTT_PORT  = int(os.getenv("MQTT_PORT", "1883"))
-MQTT_USER  = os.getenv("MQTT_USER",  "thiru")
-MQTT_PASS  = os.getenv("MQTT_PASS",  "password")
+MQTT_USER  = os.getenv("MQTT_USER",  "admin")
+MQTT_PASS  = os.getenv("MQTT_PASS",  "admin")
 
 # Inbound: TMS→SCADA (encrypted PIS/alarm data bridged from TMS)
 TOPIC_IN   = os.getenv("MQTT_TOPIC_IN",  "tms/scada/pas")
