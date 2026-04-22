@@ -150,39 +150,28 @@
       Bidirectional Flow &mdash; TMS VM (10.4.0.23) ↔ SCADA VM (10.4.0.25)
     </div>
     <div style="padding:20px;background:#f8fafc;">
-    <div style="display:flex;gap:16px;align-items:stretch;min-width:1320px;overflow-x:auto;">
+    <div style="display:flex;flex-direction:column;gap:0;min-width:1320px;overflow-x:auto;">
 
-      <!-- ══ LEFT STANDALONE COLUMN — Thales.EPS.ExternalSystems ══ -->
-      <div style="width:230px;flex-shrink:0;display:flex;flex-direction:column;">
-        <div class="comp" style="border:2px solid #f97316;border-radius:12px;overflow:hidden;flex:1;">
-          <div class="comp-head" style="background:#ea580c;padding:10px 8px;">
+      <!-- ══ TOP ROW — Thales.EPS (half-height left) + TMS VM (right) ══ -->
+      <div style="display:flex;gap:16px;align-items:stretch;">
+
+      <!-- ══ LEFT SMALL BOX — Thales.EPS.ExternalSystems ══ -->
+      <div style="width:180px;flex-shrink:0;align-self:center;">
+        <div class="comp" style="border:2px solid #f97316;border-radius:10px;overflow:hidden;">
+          <div class="comp-head" style="background:#ea580c;padding:6px 8px;font-size:9px;">
             Thales.EPS.ExternalSystems
-            <div style="font-size:7px;font-weight:400;opacity:.85;margin-top:2px;">Electrical Power System &middot; external</div>
           </div>
-          <div class="comp-body" style="display:flex;flex-direction:column;gap:8px;">
-            <div class="sub">third-party downstream consumer</div>
-            <div class="sub">subscribes to TMS + SCADA streams</div>
-            <hr style="border:none;border-top:1px solid #f1f5f9;margin:2px 0"/>
-
-            <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:7px 9px;">
-              <div style="font-size:8.5px;font-weight:800;color:#1d4ed8;margin-bottom:4px;">&#x25C0; FROM TMS</div>
-              <div><span class="tag tag-blue">Artemis: TMS.EPS.Info</span></div>
-              <div class="sub" style="margin-top:3px;">power-system commands</div>
-              <div class="sub">substation status updates</div>
-            </div>
-
-            <div style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:6px;padding:7px 9px;">
-              <div style="font-size:8.5px;font-weight:800;color:#0f766e;margin-bottom:4px;">&#x25C0; FROM SCADA</div>
-              <div><span class="tag tag-teal">RabbitMQ key: eps.alarms</span></div>
-              <div class="sub" style="margin-top:3px;">equipment alarms (RSAE)</div>
-              <div class="sub">power-trip notifications</div>
-            </div>
+          <div class="comp-body" style="padding:7px 9px;">
+            <div class="sub">Electrical Power System &middot; external</div>
+            <hr style="border:none;border-top:1px solid #f1f5f9;margin:4px 0"/>
+            <div style="color:#1d4ed8;font-weight:700;font-size:8px;">&larr; TMS: TMS.EPS.Info</div>
+            <div style="color:#0f766e;font-weight:700;font-size:8px;margin-top:2px;">&larr; SCADA: eps.alarms</div>
           </div>
         </div>
       </div>
 
-      <!-- ══ RIGHT MAIN COLUMN — TMS VM + Connector + SCADA VM ══ -->
-      <div style="flex:1;display:flex;flex-direction:column;gap:0;min-width:0;">
+      <!-- ══ RIGHT: TMS VM zone only ══ -->
+      <div style="flex:1;min-width:0;">
 
       <!-- ══ TMS VM ZONE ══ -->
       <div class="zone zone-tms">

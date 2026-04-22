@@ -55,7 +55,7 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 
 
 # ── Config (env + runtime-mutable) ─────────────────────────────────────
-MQTT_HOST  = os.getenv("MQTT_HOST",  "rabbitmq")
+MQTT_HOST  = os.getenv("MQTT_HOST",  "10.4.0.10")
 MQTT_PORT  = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_USER  = os.getenv("MQTT_USER",  "thiru")
 MQTT_PASS  = os.getenv("MQTT_PASS",  "password")
@@ -72,7 +72,7 @@ TOPIC_OUT  = os.getenv("MQTT_TOPIC_OUT", "scada/tms/alarms")
 
 CREATOR_ID = os.getenv("SCADA_CREATOR_ID", "ScateX")
 
-AES_KEY_B64 = os.getenv("SCADA_AES_KEY", "")
+AES_KEY_B64 = os.getenv("SCADA_AES_KEY", "k7Qh2NfT8vR0mC9aXy4pLwZbE3sG6uJtH1iKd5oArMw=")
 AES_KEY = base64.b64decode(AES_KEY_B64) if AES_KEY_B64 else None
 
 # Runtime-mutable config — EVERY value below is editable live via
@@ -220,6 +220,7 @@ def on_message(client, userdata, msg):
 
     messages_in.appendleft(entry)
     broadcast_sse("received", entry)
+    print(f"[scada-api] RX {msg.topic} ({len(msg.payload)}b): {entry.get('decoded') or entry.get('error')}", flush=True)
 
 
 # ── SCADA publisher — the "sending" side ─────────────────────────────

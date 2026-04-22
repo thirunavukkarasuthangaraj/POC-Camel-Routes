@@ -134,7 +134,11 @@ public class KafkaBridgeRoutes extends RouteBuilder {
                                 .append("?brokerUrl=").append(mqtt.getBrokerUrl())
                                 .append("&qos=").append(mqtt.getQos())
                                 .append("&clientId=").append(mqtt.getClientId())
-                                .append("-").append(topic.replace(".", "-").toLowerCase());
+                                .append("-").append(topic.replace(".", "-").toLowerCase())
+                                .append("&automaticReconnect=true")
+                                .append("&cleanSession=true")
+                                .append("&connectionTimeout=10")
+                                .append("&keepAliveInterval=30");
                         if (mqtt.getUsername() != null && !mqtt.getUsername().isBlank()) {
                             uri.append("&userName=").append(mqtt.getUsername())
                                .append("&password=").append(mqtt.getPassword());
