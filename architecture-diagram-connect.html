@@ -2,382 +2,446 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>PAS-SCADA — Connect-fronted architecture</title>
+<title>PAS-SCADA Integration Architecture · v2.0.0</title>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  font-family: 'Segoe UI', -apple-system, sans-serif;
-  background: #0d1117; color: #e6edf3; padding: 28px;
-  line-height: 1.5;
-}
-h1 { font-size: 22px; color: #58a6ff; text-align: center; margin-bottom: 6px; }
-.subtitle { text-align: center; color: #8b949e; font-size: 13px; margin-bottom: 28px; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:        #f7f9fc;
+    --panel:     #ffffff;
+    --line:      #d8dee6;
+    --text:      #1c2330;
+    --muted:     #6b7384;
+    --internal:  #2563eb;       /* blue   */
+    --external:  #16a34a;       /* green  */
+    --connect:   #dc2626;       /* red    */
+    --kafka:     #d97706;       /* orange */
+    --bridge:    #7c3aed;       /* purple */
+    --rabbit:    #ea580c;       /* deep orange */
+    --monitor:   #db2777;       /* pink */
+    --mono:      'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  }
+  body {
+    font-family: 'Segoe UI', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 28px 24px;
+    font-size: 13px; line-height: 1.5;
+  }
 
-/* ─── VM container ─── */
-.vm {
-  border: 2px solid #30363d; border-radius: 12px;
-  margin-bottom: 16px; padding: 18px 20px 20px;
-  position: relative; background: #161b22;
-}
-.vm-label {
-  position: absolute; top: -12px; left: 18px;
-  background: #0d1117; padding: 0 10px;
-  font-size: 11px; font-weight: 700; letter-spacing: 1.2px;
-  text-transform: uppercase;
-}
-.vm-tms   { border-color: #1f6feb; }
-.vm-tms   .vm-label { color: #58a6ff; }
-.vm-scada { border-color: #0b6e4f; }
-.vm-scada .vm-label { color: #39d353; }
+  header { text-align: center; margin-bottom: 26px; }
+  header h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; }
+  header .sub { font-size: 13px; color: var(--muted); margin-top: 4px; font-weight: 500; }
 
-/* ─── Component box ─── */
-.row {
-  display: grid;
-  gap: 14px;
-  margin-top: 8px;
-}
-.row-5 { grid-template-columns: repeat(5, 1fr); }
-.row-3 { grid-template-columns: repeat(3, 1fr); }
-.row-2 { grid-template-columns: repeat(2, 1fr); }
+  /* ── two-box layout ── */
+  .systems {
+    display: grid;
+    grid-template-columns: 1.35fr auto 1fr;
+    gap: 16px;
+    align-items: stretch;
+    margin-bottom: 18px;
+  }
 
-.box {
-  border: 1px solid #30363d; border-radius: 8px;
-  background: #0d1117; padding: 12px 14px;
-  font-size: 12px;
-}
-.box-title {
-  font-weight: 700; font-size: 13px; margin-bottom: 4px;
-  display: flex; justify-content: space-between; align-items: baseline;
-}
-.box-tag {
-  font-size: 9px; font-weight: 700; letter-spacing: 1px;
-  padding: 1px 6px; border-radius: 4px;
-}
-.tag-new { background: #1f6feb33; color: #58a6ff; }
-.tag-keep { background: #23863633; color: #3fb950; }
+  .system {
+    background: var(--panel);
+    border-radius: 14px;
+    padding: 18px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    display: flex; flex-direction: column;
+  }
+  .system.internal { border: 3px solid var(--internal); }
+  .system.external { border: 3px solid var(--external); }
 
-.box-sub { color: #8b949e; font-size: 10.5px; margin-bottom: 6px; }
-.box ul { margin: 4px 0 0 14px; font-size: 11px; }
-.box li { margin: 1px 0; }
-.port { color: #d29922; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
-.tcp  { color: #79c0ff; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .system-head {
+    margin-bottom: 4px;
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  .system-head .tag {
+    font-size: 10px; font-weight: 800; letter-spacing: 1.5px;
+    padding: 3px 8px; border-radius: 4px;
+    color: #fff;
+  }
+  .system.internal .tag { background: var(--internal); }
+  .system.external .tag { background: var(--external); }
+  .system-head h2 {
+    font-size: 18px; font-weight: 800;
+  }
+  .system.internal .system-head h2 { color: var(--internal); }
+  .system.external .system-head h2 { color: var(--external); }
+  .system-meta {
+    font-size: 11px; color: var(--muted); margin-bottom: 14px;
+    font-family: var(--mono);
+  }
+  .system-desc {
+    font-size: 11.5px; color: var(--muted); margin-bottom: 16px;
+    padding: 8px 10px; background: #f6f8fa; border-radius: 6px;
+    border-left: 3px solid var(--line);
+  }
+  .system.internal .system-desc { border-left-color: var(--internal); }
+  .system.external .system-desc { border-left-color: var(--external); }
 
-.b-bridge   { border-left: 3px solid #3fb950; }
-.b-connect  { border-left: 3px solid #58a6ff; }
-.b-monitor  { border-left: 3px solid #f78166; }
-.b-kafka    { border-left: 3px solid #e3b341; }
-.b-artemis  { border-left: 3px solid #bc8cff; }
-.b-rabbit   { border-left: 3px solid #8957e5; }
-.b-scada    { border-left: 3px solid #39d353; }
+  /* ── components stack vertically inside each system ── */
+  .components {
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .component {
+    background: #fff;
+    border: 2px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .c-artemis  { border-color: var(--internal); }
+  .c-connect  { border-color: var(--connect); }
+  .c-kafka    { border-color: var(--kafka); }
+  .c-camel    { border-color: var(--bridge); }
+  .c-monitor  { border-color: var(--monitor); border-style: dashed; }
+  .c-rabbit   { border-color: var(--rabbit); }
+  .c-scada    { border-color: var(--external); }
 
-/* ─── Flow arrows ─── */
-.flows { margin: 28px 0; }
-.flows h2 {
-  font-size: 14px; color: #58a6ff;
-  border-bottom: 1px solid #30363d; padding-bottom: 6px; margin-bottom: 14px;
-}
-.flow-row {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 11.5px; padding: 5px 0;
-  font-family: 'JetBrains Mono', monospace;
-}
-.flow-row .arrow { color: #58a6ff; font-weight: 700; }
-.flow-row .topic { color: #d29922; }
-.flow-row .comp { color: #3fb950; }
-.flow-row .dlq { color: #f85149; font-style: italic; }
-.flow-row .ext { color: #8b949e; }
+  .c-head {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 6px;
+  }
+  .c-num {
+    flex-shrink: 0;
+    width: 28px; height: 28px; border-radius: 50%;
+    color: #fff; font-weight: 800; font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .c-artemis .c-num { background: var(--internal); }
+  .c-connect .c-num { background: var(--connect); }
+  .c-kafka   .c-num { background: var(--kafka); }
+  .c-camel   .c-num { background: var(--bridge); }
+  .c-monitor .c-num { background: var(--monitor); }
+  .c-rabbit  .c-num { background: var(--rabbit); }
+  .c-scada   .c-num { background: var(--external); }
 
-/* ─── DLQ table ─── */
-.dlq-table {
-  width: 100%; border-collapse: collapse;
-  font-size: 11.5px; margin-top: 8px;
-}
-.dlq-table th, .dlq-table td {
-  border: 1px solid #30363d; padding: 8px 10px; text-align: left;
-}
-.dlq-table th {
-  background: #161b22; color: #58a6ff;
-  font-weight: 600; font-size: 11px;
-}
-.dlq-table td.mono {
-  font-family: 'JetBrains Mono', monospace; color: #d29922;
-}
+  .c-title {
+    font-size: 14px; font-weight: 700;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .c-icon { font-size: 16px; }
+  .badge {
+    margin-left: auto;
+    font-size: 9px; font-weight: 800; letter-spacing: 0.6px;
+    padding: 2px 6px; border-radius: 4px;
+  }
+  .b-existing { background: #e0e7ff; color: var(--internal); }
+  .b-new      { background: #fee2e2; color: var(--connect); }
+  .b-shared   { background: #ffedd5; color: var(--rabbit); }
 
-/* ─── Toggle / cutover panel ─── */
-.toggle {
-  background: #161b22; border: 1px solid #30363d; border-radius: 8px;
-  padding: 16px 20px; margin-top: 24px;
-}
-.toggle h2 { font-size: 14px; color: #58a6ff; margin-bottom: 10px; }
-.toggle pre {
-  background: #0d1117; padding: 10px 12px; border-radius: 6px;
-  font-size: 12px; color: #d2a8ff; margin: 8px 0;
-  overflow-x: auto;
-}
-.toggle .label-on  { color: #3fb950; font-weight: 700; }
-.toggle .label-off { color: #8b949e; font-weight: 700; }
+  .c-role {
+    font-size: 10.5px; color: var(--muted); font-weight: 600;
+    margin-bottom: 8px; padding-left: 38px;
+    text-transform: uppercase; letter-spacing: 0.8px;
+  }
+  .c-body { padding-left: 38px; }
+  .c-body ul { list-style: none; }
+  .c-body li { font-size: 11.5px; margin: 2px 0; color: var(--muted); }
+  .c-body li b { color: var(--text); }
+  .c-body .topic { color: var(--kafka); font-family: var(--mono); font-weight: 600; }
+  .c-body .port  { color: var(--connect); font-family: var(--mono); font-weight: 600; }
+  .c-body code   { color: var(--bridge); font-family: var(--mono); font-size: 11px; }
 
-footer { margin-top: 32px; text-align: center; color: #6e7681; font-size: 11px; }
+  /* ── cross-VM bridge in the middle ── */
+  .bridge-col {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+    min-width: 200px;
+  }
+  .bridge-pill {
+    background: #fff;
+    border: 2px dashed var(--rabbit);
+    border-radius: 12px;
+    padding: 16px 20px;
+    text-align: center;
+    width: 100%;
+  }
+  .bridge-pill .bp-tag {
+    font-size: 9.5px; font-weight: 800; letter-spacing: 1.5px;
+    color: var(--rabbit);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .bridge-pill .bp-title {
+    font-size: 14px; font-weight: 700; color: var(--text);
+    margin-bottom: 10px;
+  }
+  .bridge-pill .bp-arr {
+    font-size: 22px; color: var(--rabbit); margin: 4px 0;
+  }
+  .bridge-pill .bp-detail {
+    font-size: 10.5px; color: var(--muted); font-family: var(--mono);
+    margin-top: 4px; line-height: 1.7;
+  }
+  .bridge-pill .bp-detail b { color: var(--text); }
+
+  /* ── bottom info strip ── */
+  .panels {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px;
+  }
+  .panel {
+    background: var(--panel); border: 1.5px solid var(--line);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .panel.dlq      { border-left: 4px solid var(--kafka); }
+  .panel.security { border-left: 4px solid var(--external); }
+  .panel.flows    { border-left: 4px solid var(--bridge); }
+  .panel h3 {
+    font-size: 11.5px; font-weight: 800; letter-spacing: 0.8px; margin-bottom: 8px;
+  }
+  .panel.dlq      h3 { color: var(--kafka); }
+  .panel.security h3 { color: var(--external); }
+  .panel.flows    h3 { color: var(--bridge); }
+  .panel ul { margin-left: 16px; font-size: 11px; color: var(--muted); }
+  .panel li { margin: 2px 0; }
+  .panel li b { color: var(--text); }
+  .panel code { font-family: var(--mono); font-size: 10.5px; color: var(--kafka); }
+
+  footer {
+    text-align: center; font-size: 11px; color: var(--muted); margin-top: 16px;
+  }
 </style>
 </head>
 <body>
 
-<h1>PAS-SCADA — Connect-fronted Architecture</h1>
-<div class="subtitle">
-  Existing Spring Boot Camel bridge stays. Kafka Connect adds source/sink
-  connectors in front of and behind it. Health monitor watches everything.
-</div>
+<header>
+  <h1>PAS-SCADA Integration Architecture</h1>
+  <div class="sub">v2.0.0 · two-box model: <b style="color:#2563eb">INTERNAL</b> (Pink Line TMS) ↔ <b style="color:#16a34a">EXTERNAL</b> (SCADA) · single AMQP wire between them</div>
+</header>
 
-<!-- ════════════════════════════════════════════════ -->
-<!-- TMS VM                                            -->
-<!-- ════════════════════════════════════════════════ -->
-<div class="vm vm-tms">
-  <div class="vm-label">TMS VM &nbsp;·&nbsp; 10.4.0.23 &nbsp;·&nbsp; namespace: pinkline</div>
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- TWO BOXES                                                          -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="systems">
 
-  <div class="row row-5">
-
-    <div class="box b-artemis">
-      <div class="box-title">
-        Artemis <span class="box-tag tag-keep">EXISTING</span>
-      </div>
-      <div class="box-sub">JMS broker</div>
-      <ul>
-        <li><span class="port">61616</span> OpenWire</li>
-        <li><span class="port">8161</span> console</li>
-        <li>topic <i>TMS.PISInfo</i></li>
-        <li>topic <i>SCADA.TMS.Alarms</i></li>
-        <li>queue <i>DLQ.kafka-bridge</i></li>
-      </ul>
+  <!-- ──────────── INTERNAL ──────────── -->
+  <div class="system internal">
+    <div class="system-head">
+      <span class="tag">INTERNAL</span>
+      <h2>Pink Line TMS</h2>
+    </div>
+    <div class="system-meta">TMS VM · 10.4.0.23 · namespace: pinkline · own &amp; operate</div>
+    <div class="system-desc">
+      Everything Pink Line owns and runs.
+      Source XML messages from TMS, transforms them (XML→JSON, AES encrypt),
+      stores them in Kafka, and ships to the shared hub. Pink Line controls
+      deployment, scaling, and restarts.
     </div>
 
-    <div class="box b-kafka">
-      <div class="box-title">
-        Kafka <span class="box-tag tag-keep">EXISTING</span>
-      </div>
-      <div class="box-sub">Event log</div>
-      <ul>
-        <li><span class="port">9092</span> bootstrap</li>
-        <li>tms.raw</li>
-        <li>tms.scada.encrypted</li>
-        <li>scada.tms.raw</li>
-        <li>scada.tms.processed</li>
-        <li>4 × dlq.connect.*</li>
-      </ul>
-    </div>
+    <div class="components">
 
-    <div class="box b-bridge">
-      <div class="box-title">
-        tms/ <span class="box-tag tag-keep">EXISTING +2 routes</span>
+      <!-- 1 Artemis -->
+      <div class="component c-artemis">
+        <div class="c-head">
+          <div class="c-num">1</div>
+          <div class="c-title"><span class="c-icon">📨</span> Apache Artemis</div>
+          <span class="badge b-existing">EXISTING</span>
+        </div>
+        <div class="c-role">JMS broker · TMS edge</div>
+        <div class="c-body">
+          <ul>
+            <li>OpenWire <span class="port">61616</span> · Console <span class="port">8161</span></li>
+            <li>topic <span class="topic">TMS.PISInfo</span> (TMS publishes XML)</li>
+            <li>topic <span class="topic">SCADA.TMS.Alarms</span> (TMS reads alarms)</li>
+            <li>queue <span class="topic">DLQ.kafka-bridge</span></li>
+          </ul>
+        </div>
       </div>
-      <div class="box-sub">Spring Boot · Camel</div>
-      <ul>
-        <li>XmlToJson · Encrypt</li>
-        <li>Decrypt · JsonToXml</li>
-        <li>Camel <i>onException</i> →&nbsp;DLQ.kafka-bridge</li>
-        <li><b>Toggle:</b> input from Kafka</li>
-        <li><b>Toggle:</b> reverse via Kafka</li>
-      </ul>
-    </div>
 
-    <div class="box b-connect">
-      <div class="box-title">
-        connect/ <span class="box-tag tag-new">NEW</span>
+      <!-- 2 Kafka Connect -->
+      <div class="component c-connect">
+        <div class="c-head">
+          <div class="c-num">2</div>
+          <div class="c-title"><span class="c-icon">🔌</span> Kafka Connect</div>
+          <span class="badge b-new">NEW</span>
+        </div>
+        <div class="c-role">Transport only · 4 connectors</div>
+        <div class="c-body">
+          <ul>
+            <li>⬇ <b>tms-artemis-source</b> — Artemis → <span class="topic">tms.raw</span></li>
+            <li>⬆ <b>tms-rabbitmq-sink</b> — <span class="topic">tms.scada.encrypted</span> → RMQ</li>
+            <li>⬇ <b>scada-rabbitmq-source</b> — RMQ → <span class="topic">scada.tms.raw</span></li>
+            <li>⬆ <b>scada-artemis-sink</b> — <span class="topic">scada.tms.processed</span> → Artemis</li>
+            <li>cp-kafka-connect 7.5 + Camel 4.8.3 plugins · REST <span class="port">:8083</span></li>
+          </ul>
+        </div>
       </div>
-      <div class="box-sub">Kafka Connect worker</div>
-      <ul>
-        <li><span class="port">8083</span> REST API</li>
-        <li>tms-artemis-source</li>
-        <li>tms-rabbitmq-sink</li>
-        <li>scada-rabbitmq-source</li>
-        <li>scada-artemis-sink</li>
-      </ul>
-    </div>
 
-    <div class="box b-monitor">
-      <div class="box-title">
-        monitor/ <span class="box-tag tag-new">NEW</span>
+      <!-- 3 Apache Kafka -->
+      <div class="component c-kafka">
+        <div class="c-head">
+          <div class="c-num">3</div>
+          <div class="c-title"><span class="c-icon">📦</span> Apache Kafka</div>
+          <span class="badge b-existing">EXISTING</span>
+        </div>
+        <div class="c-role">Event log · pipeline buffer · DLQ store</div>
+        <div class="c-body">
+          <ul>
+            <li>4 pipeline topics: tms.raw → encrypted, scada.tms.raw → processed</li>
+            <li>4 dlq.connect.* topics (14d retention)</li>
+            <li>broker <span class="port">:9092</span> · 3 partitions · 7d retention</li>
+            <li><code>acks=all</code> · idempotent · infinite retries</li>
+          </ul>
+        </div>
       </div>
-      <div class="box-sub">Python health probe pod</div>
-      <ul>
-        <li><span class="port">8080</span> /healthz · /state</li>
-        <li>10 probes every 30s</li>
-        <li>SMTP email on fail</li>
-        <li>State on PVC</li>
-      </ul>
-    </div>
 
+      <!-- 4 Camel Bridge -->
+      <div class="component c-camel">
+        <div class="c-head">
+          <div class="c-num">4</div>
+          <div class="c-title"><span class="c-icon">🔄</span> Camel Bridge (tms/)</div>
+          <span class="badge b-existing">EXISTING + 2 toggleable</span>
+        </div>
+        <div class="c-role">Transform only · Spring Boot 3.2 · Camel 4.4</div>
+        <div class="c-body">
+          <ul>
+            <li>▶ <b>XmlToJson</b> + <b>AES-256-GCM encrypt</b></li>
+            <li>◀ <b>AES decrypt</b> + <b>JsonToXml</b> (optional)</li>
+            <li>Reads Kafka, writes Kafka — never talks to brokers directly</li>
+            <li>Toggles: <code>BRIDGE_INPUT_FROM_KAFKA</code>, <code>BRIDGE_REVERSE_KAFKA_ENABLED</code></li>
+            <li>onException → Artemis <span class="topic">DLQ.kafka-bridge</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 5 Monitor (cross-cutting) -->
+      <div class="component c-monitor">
+        <div class="c-head">
+          <div class="c-num">5</div>
+          <div class="c-title"><span class="c-icon">🩺</span> Monitor</div>
+          <span class="badge b-new">NEW</span>
+        </div>
+        <div class="c-role">Cross-cutting observability · Python · FastAPI</div>
+        <div class="c-body">
+          <ul>
+            <li>Probes 10 components every 30s (HTTP + TCP)</li>
+            <li>SMTP email on UP/DOWN transition</li>
+            <li>HTML dashboard at <span class="port">:8080/</span></li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
   </div>
 
-  <div class="row row-2" style="margin-top:14px">
-    <div class="box b-connect" style="border-left-color:#f78166">
-      <div class="box-title">
-        bootstrap/ <span class="box-tag tag-new">NEW · run-once Jobs</span>
+  <!-- ──────────── BRIDGE BETWEEN BOXES ──────────── -->
+  <div class="bridge-col">
+    <div class="bridge-pill">
+      <div class="bp-tag">CROSS-VM · ONE WIRE</div>
+      <div class="bp-title">AMQP NodePort</div>
+      <div class="bp-arr">▶ ▼</div>
+      <div class="bp-arr">◀ ▲</div>
+      <div class="bp-detail">
+        <b>10.4.0.25:30672</b><br>
+        Kafka Connect ↔ RabbitMQ<br><br>
+        Forward (▶) and reverse (◀)<br>
+        share the same wire.<br><br>
+        TLS not configured today<br>
+        <i>(future hardening)</i>
       </div>
-      <div class="box-sub">Idempotent k8s Jobs that prepare topology</div>
-      <ul>
-        <li><b>bootstrap-kafka-topics</b> — creates 8 Kafka topics with intended partitions/retention</li>
-        <li><b>bootstrap-rabbitmq-queue</b> — declares <i>scada.tms.alarms.queue</i> + binding on the SCADA-side RabbitMQ</li>
-      </ul>
     </div>
-    <div class="box" style="border-left:3px solid #6e7681">
-      <div class="box-title">
-        Cross-VM reach
+  </div>
+
+  <!-- ──────────── EXTERNAL ──────────── -->
+  <div class="system external">
+    <div class="system-head">
+      <span class="tag">EXTERNAL</span>
+      <h2>SCADA</h2>
+    </div>
+    <div class="system-meta">SCADA VM · 10.4.0.25 · namespace: scada · 3rd-party</div>
+    <div class="system-desc">
+      Owned by the SCADA team — black box from Pink Line's perspective.
+      Pink Line drops messages into RabbitMQ; RabbitMQ's MQTT plugin
+      forwards them to SCADA. Responses come back the same way.
+    </div>
+
+    <div class="components">
+
+      <!-- A RabbitMQ -->
+      <div class="component c-rabbit">
+        <div class="c-head">
+          <div class="c-num">A</div>
+          <div class="c-title"><span class="c-icon">🐰</span> RabbitMQ</div>
+          <span class="badge b-shared">SHARED HUB</span>
+        </div>
+        <div class="c-role">Integration broker · AMQP ↔ MQTT plugin</div>
+        <div class="c-body">
+          <ul>
+            <li>AMQP <span class="port">30672</span> NodePort (TMS-side ⇄)</li>
+            <li>MQTT <span class="port">31883</span> NodePort (SCADA-side ⇄)</li>
+            <li>mgmt <span class="port">31567</span> NodePort</li>
+            <li>exchange <span class="topic">amq.topic</span></li>
+            <li>queue <span class="topic">scada.tms.alarms.queue</span></li>
+            <li>routing keys → MQTT topics (auto-translation by plugin)</li>
+          </ul>
+        </div>
       </div>
-      <ul>
-        <li><span class="tcp">10.4.0.25:30672</span> — RabbitMQ AMQP</li>
-        <li><span class="tcp">10.4.0.25:31883</span> — RabbitMQ MQTT</li>
-        <li><span class="tcp">10.4.0.25:31567</span> — RabbitMQ mgmt API</li>
-        <li><span class="tcp">10.4.0.25:30891</span> — SCADA API HTTP</li>
-      </ul>
+
+      <!-- B SCADA API -->
+      <div class="component c-scada">
+        <div class="c-head">
+          <div class="c-num">B</div>
+          <div class="c-title"><span class="c-icon">🎯</span> SCADA API</div>
+          <span class="badge b-shared">EXTERNAL</span>
+        </div>
+        <div class="c-role">SCADA application · Python · Flask · Paho MQTT</div>
+        <div class="c-body">
+          <ul>
+            <li>HTTP <span class="port">30891</span> NodePort (dashboard + /api/status)</li>
+            <li>subscribes MQTT <span class="topic">tms/scada/pas</span></li>
+            <li>publishes MQTT <span class="topic">scada/tms/alarms</span></li>
+            <li>AES-256-GCM decrypt with shared key</li>
+            <li>RSAE protocol: UpdateAlarm · KeepAlive · SendAllAlarms · GetAllAlarms</li>
+          </ul>
+        </div>
+      </div>
+
     </div>
   </div>
 
 </div>
 
-<!-- ════════════════════════════════════════════════ -->
-<!-- SCADA VM                                          -->
-<!-- ════════════════════════════════════════════════ -->
-<div class="vm vm-scada">
-  <div class="vm-label">SCADA VM &nbsp;·&nbsp; 10.4.0.25 &nbsp;·&nbsp; namespace: scada</div>
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- 3 info panels at bottom                                           -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="panels">
 
-  <div class="row row-2">
-
-    <div class="box b-rabbit">
-      <div class="box-title">
-        external-scada/RabbitMQ <span class="box-tag tag-keep">EXISTING</span>
-      </div>
-      <div class="box-sub">AMQP broker + MQTT plugin</div>
-      <ul>
-        <li><span class="port">30672</span> AMQP (NodePort)</li>
-        <li><span class="port">31883</span> MQTT  (NodePort)</li>
-        <li><span class="port">31567</span> mgmt  (NodePort)</li>
-        <li>exchange <i>amq.topic</i></li>
-        <li>queue <i>scada.tms.alarms.queue</i> ← key <i>scada.tms.alarms</i></li>
-      </ul>
-    </div>
-
-    <div class="box b-scada">
-      <div class="box-title">
-        external-scada/SCADA-API <span class="box-tag tag-keep">EXISTING</span>
-      </div>
-      <div class="box-sub">Python · Flask · Paho MQTT</div>
-      <ul>
-        <li><span class="port">30891</span> dashboard + /api/status (NodePort)</li>
-        <li>subscribes MQTT <i>tms/scada/pas</i></li>
-        <li>publishes MQTT <i>scada/tms/alarms</i></li>
-        <li>decrypts AES-256-GCM with the same key</li>
-      </ul>
-    </div>
-
+  <div class="panel flows">
+    <h3>▶ ◀ DATA FLOWS (after toggle flip)</h3>
+    <ul>
+      <li><b>OUTBOUND</b>: TMS → Artemis → Connect-source → Kafka tms.raw → Camel (XML→JSON+AES) → Kafka tms.scada.encrypted → Connect-sink → RabbitMQ AMQP → MQTT plugin → SCADA</li>
+      <li><b>INBOUND</b>: SCADA → MQTT → RabbitMQ queue → Connect-source → Kafka scada.tms.raw → Camel (decrypt + JSON→XML opt) → Kafka scada.tms.processed → Connect-sink → Artemis</li>
+    </ul>
   </div>
-</div>
 
-<!-- ════════════════════════════════════════════════ -->
-<!-- DATA FLOW                                         -->
-<!-- ════════════════════════════════════════════════ -->
-<div class="flows">
-  <h2>Forward path — TMS → SCADA</h2>
-  <div class="flow-row"><span class="ext">TMS publish XML</span></div>
-  <div class="flow-row">&nbsp;<span class="arrow">→</span> Artemis topic <span class="topic">TMS.PISInfo</span></div>
-  <div class="flow-row">&nbsp;<span class="arrow">→</span> <span class="comp">tms-artemis-source</span> (connect)</div>
-  <div class="flow-row">&nbsp;<span class="arrow">→</span> Kafka <span class="topic">tms.raw</span> &nbsp;<span class="dlq">[on err: dlq.connect.tms-artemis-source]</span></div>
-  <div class="flow-row">&nbsp;<span class="arrow">→</span> <span class="comp">tms/</span> Camel: XmlToJson + Encrypt</div>
-  <div class="flow-row">&nbsp;<span class="arrow">→</span> Kafka <span class="topic">tms.scada.encrypted</span> &nbsp;<span class="dlq">[Camel err: Artemis DLQ.kafka-bridge]</span></div>
-  <div class="flow-row">&nbsp;<span class="arrow">→</span> <span class="comp">tms-rabbitmq-sink</span> (connect)</div>
-  <div class="flow-row">&nbsp;<span class="arrow">→</span> RabbitMQ <span class="topic">amq.topic</span> / key <span class="topic">tms.scada.pas</span> &nbsp;<span class="dlq">[on err: dlq.connect.tms-rabbitmq-sink]</span></div>
-  <div class="flow-row">&nbsp;<span class="arrow">→</span> RMQ MQTT plugin → MQTT topic <span class="topic">tms/scada/pas</span></div>
-  <div class="flow-row">&nbsp;<span class="arrow">→</span> <span class="comp">SCADA API</span> decrypts + displays</div>
+  <div class="panel dlq">
+    <h3>⚠ DEAD-LETTER QUEUES (5)</h3>
+    <ul>
+      <li><b>dlq.connect.tms-artemis-source</b> Kafka · 14d</li>
+      <li><b>dlq.connect.tms-rabbitmq-sink</b> Kafka · 14d</li>
+      <li><b>dlq.connect.scada-rabbitmq-source</b> Kafka · 14d</li>
+      <li><b>dlq.connect.scada-artemis-sink</b> Kafka · 14d</li>
+      <li><b>DLQ.kafka-bridge</b> Artemis queue · existing</li>
+    </ul>
+  </div>
 
-  <h2 style="margin-top:24px">Reverse path — SCADA → TMS</h2>
-  <div class="flow-row"><span class="ext">SCADA publishes RSAE</span></div>
-  <div class="flow-row">&nbsp;<span class="arrow">→</span> MQTT <span class="topic">scada/tms/alarms</span></div>
-  <div class="flow-row">&nbsp;<span class="arrow">→</span> RMQ queue <span class="topic">scada.tms.alarms.queue</span></div>
-  <div class="flow-row">&nbsp;<span class="arrow">→</span> <span class="comp">scada-rabbitmq-source</span> (connect)</div>
-  <div class="flow-row">&nbsp;<span class="arrow">→</span> Kafka <span class="topic">scada.tms.raw</span> &nbsp;<span class="dlq">[on err: dlq.connect.scada-rabbitmq-source]</span></div>
-  <div class="flow-row">&nbsp;<span class="arrow">→</span> <span class="comp">tms/</span> Camel: Decrypt + JsonToXml(opt)</div>
-  <div class="flow-row">&nbsp;<span class="arrow">→</span> Kafka <span class="topic">scada.tms.processed</span></div>
-  <div class="flow-row">&nbsp;<span class="arrow">→</span> <span class="comp">scada-artemis-sink</span> (connect)</div>
-  <div class="flow-row">&nbsp;<span class="arrow">→</span> Artemis topic <span class="topic">SCADA.TMS.Alarms</span> &nbsp;<span class="dlq">[on err: dlq.connect.scada-artemis-sink]</span></div>
-  <div class="flow-row">&nbsp;<span class="arrow">→</span> <span class="ext">TMS consumer reads</span></div>
-</div>
+  <div class="panel security">
+    <h3>🛡 SECURITY · RELIABILITY</h3>
+    <ul>
+      <li><b>AES-256-GCM</b> both directions (authenticated)</li>
+      <li>12-byte IV + 16-byte GCM tag per message</li>
+      <li>Single AMQP wire — easy to firewall + monitor</li>
+      <li>Connect: state in <code>_connect-*</code> Kafka topics — pod restart safe</li>
+      <li>Camel: supervised routes, exp backoff 5s→60s</li>
+      <li>Default-off toggles ⇒ safe rollback at any time</li>
+    </ul>
+  </div>
 
-<!-- ════════════════════════════════════════════════ -->
-<!-- DLQ TABLE                                         -->
-<!-- ════════════════════════════════════════════════ -->
-<h2 style="font-size:14px; color:#f85149; margin-top:24px; border-bottom:1px solid #30363d; padding-bottom:6px;">Dead-Letter Queues — 5 total, separate by source</h2>
-<table class="dlq-table">
-  <tr>
-    <th>DLQ name</th>
-    <th>Where</th>
-    <th>Retention</th>
-    <th>Fills when</th>
-  </tr>
-  <tr>
-    <td class="mono">dlq.connect.tms-artemis-source</td>
-    <td>Kafka topic</td>
-    <td>14d</td>
-    <td>Connect can't read Artemis (auth, malformed JMS)</td>
-  </tr>
-  <tr>
-    <td class="mono">dlq.connect.tms-rabbitmq-sink</td>
-    <td>Kafka topic</td>
-    <td>14d</td>
-    <td>Connect can't write RabbitMQ (cross-VM down, auth)</td>
-  </tr>
-  <tr>
-    <td class="mono">dlq.connect.scada-rabbitmq-source</td>
-    <td>Kafka topic</td>
-    <td>14d</td>
-    <td>Connect can't read SCADA-side RMQ queue</td>
-  </tr>
-  <tr>
-    <td class="mono">dlq.connect.scada-artemis-sink</td>
-    <td>Kafka topic</td>
-    <td>14d</td>
-    <td>Connect can't write back to Artemis</td>
-  </tr>
-  <tr>
-    <td class="mono">DLQ.kafka-bridge</td>
-    <td>Artemis queue (existing)</td>
-    <td>broker default</td>
-    <td>tms/ Camel <i>onException</i> — XmlToJson parse, AES fail, etc.</td>
-  </tr>
-</table>
-
-<!-- ════════════════════════════════════════════════ -->
-<!-- CUTOVER TOGGLES                                   -->
-<!-- ════════════════════════════════════════════════ -->
-<div class="toggle">
-  <h2>Cutover — flip toggles when Connect is verified</h2>
-
-  <p style="font-size:12px; color:#8b949e; margin-bottom:10px;">
-    On day-1 deploy the toggles default to <span class="label-off">OFF</span> —
-    the Camel bridge runs <i>exactly as it does today</i>. Connect runs alongside
-    but its output is unused. Verify, then flip:
-  </p>
-
-  <pre>kubectl -n pinkline set env deploy/pas-scada-bridge \
-  BRIDGE_INPUT_FROM_KAFKA=<span class="label-on">true</span> \
-  BRIDGE_PIPELINE=kafka \
-  BRIDGE_REVERSE_KAFKA_ENABLED=<span class="label-on">true</span></pre>
-
-  <p style="font-size:12px; color:#8b949e; margin-top:8px;">
-    After this:
-  </p>
-  <ul style="font-size:12px; margin-left:18px; color:#e6edf3;">
-    <li>Bridge stops consuming Artemis directly — reads <span class="topic" style="color:#d29922">tms.raw</span> (from Connect's source) instead.</li>
-    <li>Bridge stops writing RabbitMQ/MQTT directly — writes only <span class="topic" style="color:#d29922">tms.scada.encrypted</span> (Connect's sink delivers).</li>
-    <li>Bridge adds the reverse Kafka route (<span class="topic" style="color:#d29922">scada.tms.raw</span> → decrypt → <span class="topic" style="color:#d29922">scada.tms.processed</span>).</li>
-  </ul>
-
-  <p style="font-size:12px; color:#8b949e; margin-top:10px;">
-    <b>Rollback</b> — set all three back to <span class="label-off">false</span> /
-    <span class="label-off">kafka,rabbitmq,mqtt</span> and the bridge reverts to today's behavior.
-  </p>
 </div>
 
 <footer>
-  Drawn 2026 · matches README.md · 6 modules (4 new, 2 existing)
+  v2.0.0 · 5 internal components + 2 external components · 1 cross-VM AMQP wire · 5 DLQs · matches README.md and source code
 </footer>
 
 </body>
