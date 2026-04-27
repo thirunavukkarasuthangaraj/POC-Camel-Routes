@@ -499,7 +499,7 @@ PAS-SCADA-Kafka-Bridge/
 │
 ├── docker-compose.yml       ← Artemis + Kafka + Zookeeper + RabbitMQ
 ├── pom.xml                  ← Maven dependencies
-├── ARCHITECTURE.md          ← full system diagram
+├── README.md                ← single source of truth: architecture + deploy + cutover
 ├── HOWTO-START.md           ← this file
 │
 └── src/

@@ -8,5 +8,5 @@ This folder is reserved for the SCADA API service that will:
 
 Uncomment the `scada-api:` service in `../docker-compose.yml` once the image is ready.
 
-See repo ARCHITECTURE.md for the full Box 7 description.
+See repo `README.md` and `architecture-diagram-connect.html` for the full system architecture.
 

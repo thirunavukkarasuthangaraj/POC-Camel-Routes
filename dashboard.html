@@ -221,15 +221,15 @@
 <div class="header">
   <div>
     <h1>PAS-SCADA Kafka Bridge — Live Dashboard</h1>
-    <p>Pink Line TMS Integration &nbsp;|&nbsp; Real-time message flow simulation</p>
+    <p id="header-sub">Pink Line TMS Integration &nbsp;|&nbsp; Demo mode — fake messages</p>
   </div>
   <div id="statusBadge" class="status-badge stopped">STOPPED</div>
 </div>
 
 <!-- ── Controls ── -->
 <div class="controls">
-  <button class="btn btn-start" id="btnStart" onclick="startBridge()">Start Bridge</button>
-  <button class="btn btn-stop"  id="btnStop"  onclick="stopBridge()" disabled>Stop Bridge</button>
+  <button class="btn btn-start" id="btnStart" onclick="startBridge()">Start Demo</button>
+  <button class="btn btn-stop"  id="btnStop"  onclick="stopBridge()" disabled>Stop</button>
   <button class="btn btn-send"  id="btnSend"  onclick="sendOnce()"   disabled>Send One Message</button>
   <button class="btn btn-clear" onclick="clearLog()">Clear Log</button>
   <span class="speed-label">Auto-send interval:</span>
@@ -239,6 +239,17 @@
     <option value="10000">10 seconds</option>
     <option value="0">Manual only</option>
   </select>
+
+  <!-- ── LIVE mode (subscribes to bridge SSE for real data) ── -->
+  <span class="speed-label" style="margin-left:24px; padding-left:24px; border-left:1px solid #30363d;">Bridge URL:</span>
+  <input type="text" id="liveUrl"
+         value="http://localhost:8085"
+         style="background:#21262d; border:1px solid #30363d; color:#e6edf3; padding:8px 12px; border-radius:6px; font-size:13px; width:240px; font-family:monospace;">
+  <button class="btn" id="btnLive" onclick="toggleLive()"
+          style="background:#bc8cff22; color:#bc8cff; border:1px solid #bc8cff;">
+    🔴 GO LIVE
+  </button>
+  <span id="liveStatus" style="color:#8b949e; font-size:12px;"></span>
 </div>
 
 <!-- ── Pipeline ── -->
@@ -1028,6 +1039,209 @@ function syntaxHighlight(json) {
         else if (/true|false/.test(m)) cls='json-bool';
         return `<span class="${cls}">${m}</span>`;
       });
+}
+
+// ════════════════════════════════════════════════════════════════
+// LIVE MODE — subscribes to the bridge's SSE feed for real messages.
+// Connects to {bridgeUrl}/api/messages/stream and runs the same
+// visual animation with REAL data instead of the canned SAMPLES.
+// ════════════════════════════════════════════════════════════════
+
+let liveSource = null;
+let liveOn = false;
+
+function toggleLive() {
+  if (liveOn) { stopLive(); } else { startLive(); }
+}
+
+function startLive() {
+  // Stop the demo loop if it's running
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+  running = true;
+
+  const url = document.getElementById('liveUrl').value.trim().replace(/\/$/, '');
+  const sseUrl = url + '/api/messages/stream';
+
+  // Reset counters so the LIVE feed starts clean
+  Object.keys(stats).forEach(k => stats[k] = 0);
+  ['cnt-tms','cnt-artemis','cnt-bridge','cnt-kafka','cnt-rabbit','cnt-scada']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.textContent = id.includes('scada') ? '0 recv' : '0 msgs'; });
+  updateStats();
+
+  document.getElementById('btnStart').disabled = true;
+  document.getElementById('btnStop').disabled  = true;
+  document.getElementById('btnSend').disabled  = true;
+  document.getElementById('btnLive').textContent = '⏹ Stop Live';
+  document.getElementById('btnLive').style.background = '#f8514922';
+  document.getElementById('btnLive').style.color = '#f85149';
+  document.getElementById('btnLive').style.borderColor = '#f85149';
+  document.getElementById('statusBadge').className = 'status-badge running';
+  document.getElementById('statusBadge').textContent = 'LIVE';
+  document.getElementById('header-sub').innerHTML =
+    'Pink Line TMS Integration &nbsp;|&nbsp; <b style="color:#f85149">LIVE</b> — streaming real messages from <code>' + url + '</code>';
+  document.getElementById('liveStatus').textContent = 'connecting…';
+  document.getElementById('liveStatus').style.color = '#d29922';
+
+  ['node-tms','node-artemis','node-bridge','node-kafka','node-rabbit','node-scada']
+    .forEach(id => document.getElementById(id).classList.add('active'));
+
+  addLog('bridge', `LIVE mode: connecting to ${sseUrl}`);
+
+  try {
+    liveSource = new EventSource(sseUrl);
+  } catch (e) {
+    document.getElementById('liveStatus').textContent = 'failed: ' + e.message;
+    document.getElementById('liveStatus').style.color = '#f85149';
+    return;
+  }
+
+  liveSource.onopen = () => {
+    document.getElementById('liveStatus').textContent = '● connected';
+    document.getElementById('liveStatus').style.color = '#3fb950';
+    addLog('bridge', 'SSE connection open — receiving real-time messages');
+  };
+
+  liveSource.addEventListener('message', evt => {
+    try {
+      const msg = JSON.parse(evt.data);
+      handleLiveMessage(msg);
+    } catch (e) {
+      addLog('bridge', 'Failed to parse live message: ' + e.message);
+    }
+  });
+
+  liveSource.onerror = () => {
+    if (liveSource && liveSource.readyState === 2) {
+      document.getElementById('liveStatus').textContent = '✗ disconnected (will retry)';
+      document.getElementById('liveStatus').style.color = '#f85149';
+    }
+  };
+
+  liveOn = true;
+}
+
+function stopLive() {
+  if (liveSource) {
+    liveSource.close();
+    liveSource = null;
+  }
+  liveOn = false;
+  running = false;
+
+  document.getElementById('btnStart').disabled = false;
+  document.getElementById('btnStop').disabled  = true;
+  document.getElementById('btnSend').disabled  = true;
+  document.getElementById('btnLive').textContent = '🔴 GO LIVE';
+  document.getElementById('btnLive').style.background = '#bc8cff22';
+  document.getElementById('btnLive').style.color = '#bc8cff';
+  document.getElementById('btnLive').style.borderColor = '#bc8cff';
+  document.getElementById('statusBadge').className = 'status-badge stopped';
+  document.getElementById('statusBadge').textContent = 'STOPPED';
+  document.getElementById('header-sub').textContent =
+    'Pink Line TMS Integration  |  Demo mode — fake messages';
+  document.getElementById('liveStatus').textContent = '';
+
+  ['node-tms','node-artemis','node-bridge','node-kafka','node-rabbit','node-scada']
+    .forEach(id => document.getElementById(id).classList.remove('active','sending'));
+  for (let i=1;i<=5;i++) deactivateArrow(i);
+  addLog('bridge', 'LIVE mode stopped');
+}
+
+// Run the visual flow with a real message from the bridge SSE.
+// MessageStore.ScadaMessage = { id, receivedAt, topic, json }
+function handleLiveMessage(msg) {
+  if (!liveOn) return;
+
+  // Detect ICD type from the JSON payload (defensive — fall back to topic)
+  let mtype = 'TMS_PAS_UPDATE';
+  let trainId = '—', platform = '—', arrival = '—', runNo = '—';
+  let parsed = null;
+  try {
+    parsed = JSON.parse(msg.json);
+    mtype = parsed.messageType || mtype;
+    const pp = (parsed.platformPredictions || [])[0];
+    if (pp) {
+      platform = pp.platformId || '—';
+      const t = (pp.predictedTrains || [])[0];
+      if (t) {
+        trainId = t.trainId || '—';
+        arrival = (t.arrivalTime != null) ? (t.arrivalTime + 's') : '—';
+        runNo = t.runNumber != null ? t.runNumber : '—';
+      }
+    }
+  } catch (e) {
+    parsed = null;
+  }
+
+  // Stats — bump everything along the path (real message implies it traversed all stages)
+  stats.total++;
+  updateStats();
+
+  // Update the XML panel with the actual JSON we just got
+  const xmlPanel = document.getElementById('xmlPanel');
+  if (xmlPanel) {
+    xmlPanel.innerHTML =
+      `<span style="color:#8b949e">Topic: </span>${msg.topic}\n` +
+      `<span style="color:#8b949e">Received: </span>${msg.receivedAt}\n` +
+      `<span style="color:#8b949e">Message ID: </span>#${msg.id}\n\n` +
+      syntaxHighlight(JSON.stringify(parsed || msg.json, null, 2));
+  }
+
+  // Box-by-box animation with the real data
+  pulse('node-tms');
+  setTimeout(() => activateArrow(1), 100);
+  setTimeout(() => {
+    pulse('node-artemis');
+    deactivateArrow(1);
+    document.getElementById('cnt-artemis').textContent = stats.total + ' msgs';
+  }, 350);
+
+  setTimeout(() => activateArrow(2), 500);
+  setTimeout(() => {
+    pulse('node-bridge');
+    deactivateArrow(2);
+    document.getElementById('cnt-bridge').textContent = stats.total + ' proc';
+    setLive('camel-live', true);
+    set('r-camel-topic', msg.topic);
+    set('r-camel-type', mtype);
+    set('r-camel-platform', platform);
+    set('r-camel-trainid', trainId);
+    set('r-camel-arrival', arrival);
+    set('r-camel-runno', runNo);
+    set('r-camel-jsonsize', msg.json.length + ' B');
+    set('r-camel-total', stats.total);
+    setTimeout(() => setBadgeLive('camel-live', false), 1500);
+  }, 800);
+
+  setTimeout(() => activateArrow(3), 1000);
+  setTimeout(() => {
+    pulse('node-kafka');
+    deactivateArrow(3);
+    document.getElementById('cnt-kafka').textContent = stats.total + ' msgs';
+    setLive('kafka-live', true);
+    setTimeout(() => setBadgeLive('kafka-live', false), 1500);
+  }, 1300);
+
+  setTimeout(() => activateArrow(4), 1500);
+  setTimeout(() => {
+    pulse('node-rabbit');
+    deactivateArrow(4);
+    document.getElementById('cnt-rabbit').textContent = stats.total + ' msgs';
+    setLive('rabbit-live', true);
+    setTimeout(() => setBadgeLive('rabbit-live', false), 1500);
+  }, 1800);
+
+  setTimeout(() => activateArrow(5), 2000);
+  setTimeout(() => {
+    pulse('node-scada');
+    deactivateArrow(5);
+    document.getElementById('cnt-scada').textContent = stats.total + ' recv';
+    setLive('scada-live', true);
+    setTimeout(() => setBadgeLive('scada-live', false), 1500);
+  }, 2300);
+
+  // Log entry per real message
+  addLog('bridge', `← #${msg.id} ${msg.topic} (${msg.json.length}B JSON)`);
 }
 </script>
 </body>
