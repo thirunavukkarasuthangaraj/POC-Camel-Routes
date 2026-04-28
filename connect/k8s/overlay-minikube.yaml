@@ -1,0 +1,122 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: connect-secret
+  namespace: pinkline
+type: Opaque
+stringData:
+  ARTEMIS_USER:     "admin"
+  ARTEMIS_PASSWORD: "admin"
+  RABBITMQ_USER:    "thiru"
+  RABBITMQ_PASS:    "password"
+  MQTT_USER:        "thiru"
+  MQTT_PASS:        "password"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: connect-config
+  namespace: pinkline
+data:
+  tms-artemis-source.json: |
+    {
+      "connector.class": "org.apache.camel.kafkaconnector.jmspooledapacheartemissource.CamelJmspooledapacheartemissourceSourceConnector",
+      "tasks.max": "1",
+      "topics": "tms.raw",
+
+      "camel.kamelet.jms-pooled-apache-artemis-source.brokerURL": "tcp://host.minikube.internal:61616",
+      "camel.kamelet.jms-pooled-apache-artemis-source.destinationName": "TMS.PISInfo",
+      "camel.kamelet.jms-pooled-apache-artemis-source.destinationType": "topic",
+      "camel.kamelet.jms-pooled-apache-artemis-source.username": "${env:ARTEMIS_USER}",
+      "camel.kamelet.jms-pooled-apache-artemis-source.password": "${env:ARTEMIS_PASSWORD}",
+
+      "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+      "value.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+
+      "errors.tolerance": "all",
+      "errors.log.enable": "true",
+      "errors.log.include.messages": "true",
+      "errors.deadletterqueue.topic.name": "dlq.connect.tms-artemis-source",
+      "errors.deadletterqueue.topic.replication.factor": "1",
+      "errors.deadletterqueue.context.headers.enable": "true",
+      "errors.retry.timeout": "600000",
+      "errors.retry.delay.max.ms": "30000"
+    }
+
+  tms-rabbitmq-sink.json: |
+    {
+      "connector.class": "org.apache.camel.kafkaconnector.springrabbitmqsink.CamelSpringrabbitmqsinkSinkConnector",
+      "tasks.max": "1",
+      "topics": "tms.scada.encrypted",
+
+      "camel.kamelet.spring-rabbitmq-sink.host": "rabbitmq-internal.scada.svc.cluster.local",
+      "camel.kamelet.spring-rabbitmq-sink.port": "5672",
+      "camel.kamelet.spring-rabbitmq-sink.username": "${env:RABBITMQ_USER}",
+      "camel.kamelet.spring-rabbitmq-sink.password": "${env:RABBITMQ_PASS}",
+      "camel.kamelet.spring-rabbitmq-sink.exchangeName": "amq.topic",
+      "camel.kamelet.spring-rabbitmq-sink.routingKey": "tms.scada.pas",
+      "camel.kamelet.spring-rabbitmq-sink.autoDeclareProducer": "true",
+
+      "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+      "value.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+
+      "errors.tolerance": "all",
+      "errors.log.enable": "true",
+      "errors.deadletterqueue.topic.name": "dlq.connect.tms-rabbitmq-sink",
+      "errors.deadletterqueue.topic.replication.factor": "1",
+      "errors.deadletterqueue.context.headers.enable": "true",
+      "errors.retry.timeout": "600000",
+      "errors.retry.delay.max.ms": "30000"
+    }
+
+  scada-rabbitmq-source.json: |
+    {
+      "connector.class": "org.apache.camel.kafkaconnector.springrabbitmqsource.CamelSpringrabbitmqsourceSourceConnector",
+      "tasks.max": "1",
+      "topics": "scada.tms.raw",
+
+      "camel.kamelet.spring-rabbitmq-source.host": "rabbitmq-internal.scada.svc.cluster.local",
+      "camel.kamelet.spring-rabbitmq-source.port": "5672",
+      "camel.kamelet.spring-rabbitmq-source.username": "${env:RABBITMQ_USER}",
+      "camel.kamelet.spring-rabbitmq-source.password": "${env:RABBITMQ_PASS}",
+      "camel.kamelet.spring-rabbitmq-source.exchangeName": "amq.topic",
+      "camel.kamelet.spring-rabbitmq-source.routingKey": "scada.tms.alarms",
+      "camel.kamelet.spring-rabbitmq-source.queues": "scada.tms.alarms.queue",
+      "camel.kamelet.spring-rabbitmq-source.autoDeclare": "true",
+
+      "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+      "value.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+
+      "errors.tolerance": "all",
+      "errors.log.enable": "true",
+      "errors.log.include.messages": "true",
+      "errors.deadletterqueue.topic.name": "dlq.connect.scada-rabbitmq-source",
+      "errors.deadletterqueue.topic.replication.factor": "1",
+      "errors.deadletterqueue.context.headers.enable": "true",
+      "errors.retry.timeout": "600000",
+      "errors.retry.delay.max.ms": "30000"
+    }
+
+  scada-artemis-sink.json: |
+    {
+      "connector.class": "org.apache.camel.kafkaconnector.jmspooledapacheartemissink.CamelJmspooledapacheartemissinkSinkConnector",
+      "tasks.max": "1",
+      "topics": "scada.tms.processed",
+
+      "camel.kamelet.jms-pooled-apache-artemis-sink.brokerURL": "tcp://host.minikube.internal:61616",
+      "camel.kamelet.jms-pooled-apache-artemis-sink.destinationName": "SCADA.TMS.Alarms",
+      "camel.kamelet.jms-pooled-apache-artemis-sink.destinationType": "topic",
+      "camel.kamelet.jms-pooled-apache-artemis-sink.username": "${env:ARTEMIS_USER}",
+      "camel.kamelet.jms-pooled-apache-artemis-sink.password": "${env:ARTEMIS_PASSWORD}",
+
+      "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+      "value.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+
+      "errors.tolerance": "all",
+      "errors.log.enable": "true",
+      "errors.deadletterqueue.topic.name": "dlq.connect.scada-artemis-sink",
+      "errors.deadletterqueue.topic.replication.factor": "1",
+      "errors.deadletterqueue.context.headers.enable": "true",
+      "errors.retry.timeout": "600000",
+      "errors.retry.delay.max.ms": "30000"
+    }

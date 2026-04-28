@@ -1,0 +1,100 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: monitor-config
+  namespace: pinkline
+data:
+  SMTP_HOST: "smtp.gmail.com"
+  SMTP_PORT: "587"
+  SMTP_TLS:  "true"
+  SMTP_SSL:  "false"
+  SMTP_FROM: "alerts@example.com"
+  SMTP_TO:   "ops@example.com"
+  ALERT_PREFIX: "[PAS-SCADA]"
+
+  config.yaml: |
+    interval_s: 30
+    workers:    8
+
+    checks:
+      - name: pas-scada-bridge
+        type: actuator
+        url:  http://pas-scada-bridge.pinkline.svc.cluster.local:8085/actuator/health
+        timeout_s: 5
+        fail_threshold: 3
+        recover_threshold: 2
+
+      - name: artemis-openwire
+        type: tcp
+        host: host.minikube.internal
+        port: 61616
+        timeout_s: 5
+        fail_threshold: 3
+        recover_threshold: 2
+
+      - name: artemis-console
+        type: http
+        url:  http://host.minikube.internal:8161/console/login
+        timeout_s: 5
+        fail_threshold: 3
+        recover_threshold: 2
+
+      - name: kafka
+        type: tcp
+        host: host.minikube.internal
+        port: 9092
+        timeout_s: 5
+        fail_threshold: 5
+        recover_threshold: 2
+
+      - name: zookeeper
+        type: tcp
+        host: host.minikube.internal
+        port: 2181
+        timeout_s: 5
+        fail_threshold: 5
+        recover_threshold: 2
+
+      - name: rabbitmq-amqp
+        type: tcp
+        host: rabbitmq-internal.scada.svc.cluster.local
+        port: 5672
+        timeout_s: 5
+        fail_threshold: 3
+        recover_threshold: 2
+
+      - name: rabbitmq-mqtt
+        type: tcp
+        host: rabbitmq-internal.scada.svc.cluster.local
+        port: 1883
+        timeout_s: 5
+        fail_threshold: 3
+        recover_threshold: 2
+
+      - name: scada-api
+        type: http
+        url:  http://scada-api-internal.scada.svc.cluster.local:8091/api/status
+        timeout_s: 5
+        fail_threshold: 3
+        recover_threshold: 2
+
+      - name: scada-api-mqtt-link
+        type: json_field
+        url:  http://scada-api-internal.scada.svc.cluster.local:8091/api/status
+        field: mqtt.connected
+        equals: true
+        timeout_s: 5
+        fail_threshold: 5
+        recover_threshold: 2
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: monitor-secret
+  namespace: pinkline
+type: Opaque
+stringData:
+  SMTP_USER: "alerts@example.com"
+  SMTP_PASS: "REPLACE-WITH-APP-PASSWORD"
+  RABBITMQ_USER: "thiru"
+  RABBITMQ_PASS: "password"
