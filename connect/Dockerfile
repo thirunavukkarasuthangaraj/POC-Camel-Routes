@@ -12,7 +12,7 @@
 #   4. camel-spring-rabbitmq-source            (RabbitMQ → Kafka, reverse)
 #   5. camel-jms-pooled-apache-artemis-sink    (Kafka → Artemis, reverse)
 
-FROM confluentinc/cp-kafka-connect:7.5.0
+FROM confluentinc/cp-kafka-connect:7.8.0
 
 ARG CKC_VERSION=4.8.3
 ARG MAVEN_BASE=https://repo1.maven.org/maven2/org/apache/camel/kafkaconnector

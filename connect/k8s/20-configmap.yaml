@@ -33,7 +33,7 @@ data:
       "camel.kamelet.jms-pooled-apache-artemis-source.password": "${env:ARTEMIS_PASSWORD}",
 
       "key.converter": "org.apache.kafka.connect.storage.StringConverter",
-      "value.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+      "value.converter": "org.apache.kafka.connect.storage.StringConverter",
 
       "errors.tolerance": "all",
       "errors.log.enable": "true",
@@ -65,10 +65,10 @@ data:
       "camel.kamelet.spring-rabbitmq-sink.password": "${env:RABBITMQ_PASS}",
       "camel.kamelet.spring-rabbitmq-sink.exchangeName": "amq.topic",
       "camel.kamelet.spring-rabbitmq-sink.routingKey": "tms.scada.pas",
-      "camel.kamelet.spring-rabbitmq-sink.autoDeclareProducer": "true",
+      "camel.kamelet.spring-rabbitmq-sink.autoDeclareProducer": "false",
 
       "key.converter": "org.apache.kafka.connect.storage.StringConverter",
-      "value.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+      "value.converter": "org.apache.kafka.connect.storage.StringConverter",
 
       "errors.tolerance": "all",
       "errors.log.enable": "true",
@@ -110,10 +110,10 @@ data:
       "camel.kamelet.spring-rabbitmq-source.exchangeName": "amq.topic",
       "camel.kamelet.spring-rabbitmq-source.routingKey": "scada.tms.alarms",
       "camel.kamelet.spring-rabbitmq-source.queues": "scada.tms.alarms.queue",
-      "camel.kamelet.spring-rabbitmq-source.autoDeclare": "true",
+      "camel.kamelet.spring-rabbitmq-source.autoDeclare": "false",
 
       "key.converter": "org.apache.kafka.connect.storage.StringConverter",
-      "value.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+      "value.converter": "org.apache.kafka.connect.storage.StringConverter",
 
       "errors.tolerance": "all",
       "errors.log.enable": "true",
@@ -142,7 +142,7 @@ data:
       "camel.kamelet.jms-pooled-apache-artemis-sink.password": "${env:ARTEMIS_PASSWORD}",
 
       "key.converter": "org.apache.kafka.connect.storage.StringConverter",
-      "value.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+      "value.converter": "org.apache.kafka.connect.storage.StringConverter",
 
       "errors.tolerance": "all",
       "errors.log.enable": "true",
