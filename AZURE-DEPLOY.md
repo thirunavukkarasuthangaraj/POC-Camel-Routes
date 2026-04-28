@@ -247,8 +247,8 @@ kubectl create namespace pinkline
 
 Apply ConfigMap and Secret (update values for production first):
 ```bash
-kubectl apply -f k8s/configmap-local.yaml
-kubectl apply -f k8s/secret-local.yaml
+kubectl apply -f tms/k8s/configmap.yaml
+kubectl apply -f tms/k8s/secret.yaml
 ```
 
 Deploy the bridge:
