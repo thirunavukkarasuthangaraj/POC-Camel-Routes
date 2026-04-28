@@ -26,8 +26,8 @@ metadata:
   namespace: pinkline
 type: Opaque
 stringData:
-  ARTEMIS_USER: "pasbridge"
-  ARTEMIS_PASSWORD: "testpass123"
+  ARTEMIS_USER: "admin"
+  ARTEMIS_PASSWORD: "admin"
 ---
 apiVersion: apps/v1
 kind: Deployment
