@@ -178,6 +178,180 @@ td.s2{color:var(--warn);}
 .sb-val.ok{color:var(--ok);}
 .sb-val.warn{color:var(--warn);}
 .sb-val.err{color:var(--err);}
+
+/* ════════════════════════════════════════════════════════════════════
+   Clean status-page overrides — flatten the neon/glow look into a
+   restrained palette matching monitor + demo. Last definitions win.
+   ════════════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg:           #ffffff;
+  --bg-soft:      #fafafa;
+  --surface:      #fafafa;
+  --border:       #e5e5e5;
+  --border2:      #d4d4d4;
+  --txt:          #171717;
+  --muted:        #525252;
+  --dim:          #a3a3a3;
+  --accent:       #171717;
+  --ok:           #15803d;
+  --err:          #b91c1c;
+  --warn:         #a16207;
+  --ua:           #b45309;
+  --ka:           #15803d;
+  --sa:           #6d28d9;
+  --ga:           #1d4ed8;
+  --in-clr:       #1d4ed8;
+  --font:         'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --mono:         'IBM Plex Mono', ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:           #0b0b0b;
+    --bg-soft:      #131313;
+    --surface:      #131313;
+    --border:       #1f1f1f;
+    --border2:      #2a2a2a;
+    --txt:          #ededed;
+    --muted:        #a3a3a3;
+    --dim:          #525252;
+    --accent:       #ededed;
+    --ok:           #4ade80;
+    --err:          #f87171;
+    --warn:         #facc15;
+    --ua:           #f59e0b;
+    --ka:           #4ade80;
+    --sa:           #a78bfa;
+    --ga:           #60a5fa;
+    --in-clr:       #60a5fa;
+  }
+}
+
+body { font-size: 14px; -webkit-font-smoothing: antialiased; }
+
+/* Header — flat, no gradients */
+.hdr { background: var(--bg); border-bottom: 1px solid var(--border); padding: 14px 24px; }
+.hdr h1 { font-size: 16px; color: var(--txt); font-weight: 600; letter-spacing: -0.01em; }
+.hdr p  { font-size: 12px; color: var(--muted); margin-top: 2px; font-weight: 400; }
+.pill {
+  border: 1px solid var(--border2);
+  background: var(--bg);
+  color: var(--muted);
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.dot { box-shadow: none !important; animation: none !important; }
+.dot.on  { background: var(--ok); }
+.dot.off { background: var(--err); }
+
+/* Flow — restrained outlines, no glow */
+.flow-wrap { background: var(--bg-soft); border-bottom: 1px solid var(--border); padding: 24px; }
+.fnode rect { fill: var(--bg); stroke: var(--border2); stroke-width: 1; rx: 4; }
+.fnode.active rect { stroke: var(--ok); filter: none; }
+.fnode.fail rect   { stroke: var(--err); filter: none; }
+.flabel { font: 600 11px var(--font); fill: var(--txt); }
+.fproto { font: 10px var(--mono); fill: var(--muted); }
+.frate  { font: 500 10px var(--mono); fill: var(--ok); }
+.fpipe  { stroke: var(--border2); stroke-width: 1; fill: none; }
+.fpipe.in-active  { stroke: var(--in-clr); }
+.fpipe.out-active { stroke: var(--sa); }
+
+/* Type strip — flat cards, no glow dots */
+.type-strip {
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.type-card {
+  padding: 16px 20px;
+  border-right: 1px solid var(--border);
+}
+.tc-dot { box-shadow: none !important; }
+.tc-name { font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.tc-num  { font-size: 24px; font-weight: 500; font-family: var(--mono); letter-spacing: -0.02em; }
+.tc-num.ua { color: var(--ua); }
+.tc-num.ka { color: var(--ka); }
+.tc-num.sa { color: var(--sa); }
+.tc-num.ga { color: var(--ga); }
+.tc-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* Config bar — flat */
+.cfg-bar { background: var(--bg-soft); border-bottom: 1px solid var(--border); padding: 14px 24px; }
+.cfg-group-title { font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.cfg-lbl { font-size: 12px; color: var(--muted); }
+
+/* Buttons — quiet outline by default, single solid for primary */
+.btn {
+  font-family: var(--font);
+  font-weight: 500;
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border2);
+  background: var(--bg);
+  color: var(--txt);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn:hover { border-color: var(--muted); filter: none; }
+.btn-a, .btn-w, .btn-p, .btn-b { background: var(--txt); color: var(--bg); border-color: var(--txt); }
+.btn-a:hover, .btn-w:hover, .btn-p:hover, .btn-b:hover { opacity: 0.85; }
+.btn-g  { background: var(--bg); border-color: var(--border2); color: var(--txt); }
+.btn-err { background: var(--err); color: #fff; border-color: var(--err); }
+
+/* Inputs — flat */
+input[type="text"], input[type="number"], select {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--border2);
+  background: var(--bg);
+  color: var(--txt);
+  border-radius: 4px;
+}
+input:focus, select:focus { outline: none; border-color: var(--muted); }
+
+/* Sections — flat panels, hairline borders */
+.panel, .col, .pane, .msgs-box, .msgs-pane, .scada-tms-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* Message pills — quieter colors */
+.msg-type, .ka-pill, .ua-pill, .sa-pill, .ga-pill {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border2);
+  background: var(--bg-soft);
+  color: var(--txt);
+  text-transform: uppercase;
+}
+
+/* Code/JSON blocks */
+pre, code, .json {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--bg-soft);
+  color: var(--txt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+}
+
+/* Sidebar items */
+.sb-item   { font-size: 12px; }
+.sb-label  { color: var(--muted); }
+.sb-val    { color: var(--txt); font-weight: 500; font-family: var(--mono); }
+.sb-val.ok   { color: var(--ok); }
+.sb-val.warn { color: var(--warn); }
+.sb-val.err  { color: var(--err); }
 </style>
 </head>
 <body>

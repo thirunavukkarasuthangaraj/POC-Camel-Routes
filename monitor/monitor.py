@@ -881,7 +881,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
       </div>
       <div class="stat">
         <div class="stat-label">Probe interval</div>
-        <div class="stat-value" id="stat-interval">30s</div>
+        <div class="stat-value" id="stat-interval">15s</div>
       </div>
     </div>
 
@@ -1098,9 +1098,9 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 
 @app.get("/", response_class=HTMLResponse, summary="Visual dashboard")
 def dashboard():
-    """Mission-control style live dashboard. JS polls /state every 5s,
+    """Status-page style live dashboard. JS polls /state every 5s,
     categorizes probes into 4 sections, plays an audible alarm on
-    state-change UP→DOWN once the user clicks the Enable Alarm button."""
+    state-change UP→DOWN once the user clicks the Sound on button."""
     return HTMLResponse(DASHBOARD_HTML)
 
 

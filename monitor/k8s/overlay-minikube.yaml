@@ -13,7 +13,7 @@ data:
   ALERT_PREFIX: "[PAS-SCADA]"
 
   config.yaml: |
-    interval_s: 30
+    interval_s: 15
     workers:    8
 
     checks:
