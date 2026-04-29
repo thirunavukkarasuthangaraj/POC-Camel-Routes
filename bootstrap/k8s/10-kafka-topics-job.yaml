@@ -19,13 +19,16 @@ metadata:
   name: kafka-topics-spec
   namespace: pinkline
 data:
-  # One line per topic: <name> <partitions> <replication> <retention.ms>
+  # One line per topic: <name> <partitions> <replication> <retention.ms> [cleanup_policy]
+  # cleanup_policy is optional. Default = delete. Use "compact" for keyed-state topics.
   # Retention values: 7d for pipeline data, 14d for DLQ (give time to replay).
+  # Compacted topics ignore retention.ms and retain the latest record per key forever.
   topics-spec.txt: |
     tms.raw                              3  1  604800000
     tms.scada.encrypted                  3  1  604800000
     scada.tms.raw                        3  1  604800000
     scada.tms.processed                  3  1  604800000
+    scada.tms.alarms.state               3  1  604800000  compact
     dlq.connect.tms-artemis-source       1  1  1209600000
     dlq.connect.tms-rabbitmq-sink        1  1  1209600000
     dlq.connect.scada-rabbitmq-source    1  1  1209600000
@@ -68,14 +71,20 @@ spec:
               done
 
               FAILED=0
-              while read -r name partitions replication retention; do
+              while read -r name partitions replication retention cleanup; do
                 # skip blanks / comments
                 [ -z "$name" ] && continue
                 case "$name" in '#'*) continue ;; esac
 
+                policy="${cleanup:-delete}"
                 echo "──────────────────────────────────────────"
-                echo "→ $name (partitions=$partitions, rf=$replication, retention=${retention}ms)"
+                echo "→ $name (partitions=$partitions, rf=$replication, retention=${retention}ms, cleanup.policy=$policy)"
                 echo "──────────────────────────────────────────"
+                CFG_ARGS=(--config "retention.ms=$retention" --config "cleanup.policy=$policy")
+                if [ "$policy" = "compact" ]; then
+                  # Compaction tuning so demos see segments roll quickly.
+                  CFG_ARGS+=(--config "min.cleanable.dirty.ratio=0.01" --config "segment.ms=60000")
+                fi
                 if /usr/bin/kafka-topics \
                     --bootstrap-server "$KAFKA_BOOTSTRAP" \
                     --create \
@@ -83,7 +92,7 @@ spec:
                     --topic "$name" \
                     --partitions "$partitions" \
                     --replication-factor "$replication" \
-                    --config "retention.ms=$retention"; then
+                    "${CFG_ARGS[@]}"; then
                   echo "  OK"
                 else
                   echo "  FAILED"

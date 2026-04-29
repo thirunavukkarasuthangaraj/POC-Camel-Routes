@@ -39,47 +39,45 @@ public class EncryptProcessor implements Processor {
 
     @Override
     public void process(Exchange exchange) throws Exception {
+        String jsonBody = exchange.getIn().getBody(String.class);
+        String encoded = encryptToBase64(jsonBody);
+        exchange.getIn().setBody(encoded);
+        log.debug("EncryptProcessor — encrypted {} chars of JSON -> {} char base64",
+                jsonBody.length(), encoded.length());
+    }
 
-        // 1. Read AES-256 key from environment variable only
+    /**
+     * Encrypts a JSON string and returns the base64-encoded wire-format payload.
+     * Reusable from non-Camel callers (REST controllers, fan-out processors).
+     *
+     * Wire format: [12B IV][ciphertext+16B GCM tag], then base64 encoded.
+     */
+    public static String encryptToBase64(String jsonBody) throws Exception {
         String keyB64 = System.getenv(ENV_KEY);
         if (keyB64 == null || keyB64.isBlank()) {
             throw new IllegalStateException(
                 "SCADA_AES_KEY environment variable is not set! " +
                 "Set it on the server: export SCADA_AES_KEY=<base64-256bit-key>");
         }
-
         byte[] keyBytes = Base64.getDecoder().decode(keyB64.trim());
         if (keyBytes.length != 32) {
             throw new IllegalStateException(
                 "SCADA_AES_KEY must decode to exactly 32 bytes (256-bit). " +
                 "Current length: " + keyBytes.length);
         }
-
         SecretKey secretKey = new SecretKeySpec(keyBytes, "AES");
 
-        // 2. Generate a fresh random 12-byte IV for every message
         byte[] iv = new byte[IV_LENGTH];
         SecureRandom.getInstanceStrong().nextBytes(iv);
 
-        // 3. Encrypt with AES/GCM/NoPadding
-        //    GCM automatically appends 16-byte authentication tag to ciphertext
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(Cipher.ENCRYPT_MODE, secretKey,
                 new GCMParameterSpec(GCM_TAG_BIT, iv));
+        byte[] ciphertext = cipher.doFinal(jsonBody.getBytes(StandardCharsets.UTF_8));
 
-        String jsonBody = exchange.getIn().getBody(String.class);
-        byte[] ciphertext = cipher.doFinal(
-                jsonBody.getBytes(StandardCharsets.UTF_8));
-        // ciphertext now = encrypted bytes + 16-byte GCM tag at the end
-
-        // 4. Build wire format: [12B IV][ciphertext+16B GCM tag]
         byte[] payload = new byte[IV_LENGTH + ciphertext.length];
         System.arraycopy(iv,         0, payload, 0,         IV_LENGTH);
         System.arraycopy(ciphertext, 0, payload, IV_LENGTH, ciphertext.length);
-
-        // 5. Set byte[] as exchange body — this is what goes to Kafka
-        exchange.getIn().setBody(payload);
-        log.debug("EncryptProcessor — encrypted {} bytes of JSON -> {} bytes payload",
-                jsonBody.length(), payload.length);
+        return Base64.getEncoder().encodeToString(payload);
     }
 }

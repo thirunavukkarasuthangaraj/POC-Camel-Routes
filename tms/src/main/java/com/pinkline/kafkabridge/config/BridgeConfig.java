@@ -96,6 +96,13 @@ public class BridgeConfig {
     // ── Monitor: optional in-bridge API feed ──────────────────────
     private Monitor monitor = new Monitor();
 
+    // ── AlarmState: compacted Kafka state topic (flood-control) ──
+    // When enabled, the reverse route fans out one record per alarm
+    // into a compacted Kafka topic keyed by alarmId. SCADA reconnect
+    // logic can then snapshot the latest state without replaying full
+    // event history.
+    private AlarmState alarmState = new AlarmState();
+
     // ── Getters / Setters ─────────────────────────────────────────
 
     public String getPipeline() { return pipeline; }
@@ -130,6 +137,9 @@ public class BridgeConfig {
 
     public Monitor getMonitor() { return monitor; }
     public void setMonitor(Monitor monitor) { this.monitor = monitor; }
+
+    public AlarmState getAlarmState() { return alarmState; }
+    public void setAlarmState(AlarmState alarmState) { this.alarmState = alarmState; }
 
     // ── Inner: Encryption config ──────────────────────────────────
     public static class Encrypt {
@@ -199,6 +209,17 @@ public class BridgeConfig {
         public void setQueue(String queue) { this.queue = queue; }
     }
 
+    // ── Inner: AlarmState compacted topic ─────────────────────────
+    public static class AlarmState {
+        private boolean enabled = false;
+        private String  topic   = "scada.tms.alarms.state";
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        public String getTopic() { return topic; }
+        public void setTopic(String topic) { this.topic = topic; }
+    }
+
     // ── Inner: Kafka config ───────────────────────────────────────
     public static class Kafka {
         private String topic;
@@ -237,6 +258,9 @@ public class BridgeConfig {
         private String  outputTopic   = "scada.tms.processed";
         private String  consumerGroup = "pas-bridge-reverse";
         private boolean convertToXml  = false;
+        // SCADA→TMS direction: defaults true (decrypt incoming) for back-compat,
+        // set false when SCADA publishes plain JSON.
+        private boolean encryptEnabled = true;
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -248,6 +272,8 @@ public class BridgeConfig {
         public void setConsumerGroup(String consumerGroup) { this.consumerGroup = consumerGroup; }
         public boolean isConvertToXml() { return convertToXml; }
         public void setConvertToXml(boolean convertToXml) { this.convertToXml = convertToXml; }
+        public boolean isEncryptEnabled() { return encryptEnabled; }
+        public void setEncryptEnabled(boolean encryptEnabled) { this.encryptEnabled = encryptEnabled; }
     }
 
     // ── Inner: Kafka → RabbitMQ route ────────────────────────────

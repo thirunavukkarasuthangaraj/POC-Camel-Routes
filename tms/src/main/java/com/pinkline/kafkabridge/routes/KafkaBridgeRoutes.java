@@ -2,6 +2,7 @@ package com.pinkline.kafkabridge.routes;
 
 import com.pinkline.kafkabridge.api.MessageStore;
 import com.pinkline.kafkabridge.config.BridgeConfig;
+import com.pinkline.kafkabridge.processor.AlarmStateFanoutProcessor;
 import com.pinkline.kafkabridge.processor.DecryptExample;
 import com.pinkline.kafkabridge.processor.EncryptProcessor;
 import com.pinkline.kafkabridge.processor.JsonToXmlProcessor;
@@ -9,6 +10,7 @@ import com.pinkline.kafkabridge.processor.ScadaInboundProcessor;
 import com.pinkline.kafkabridge.processor.XmlToJsonProcessor;
 import java.nio.charset.StandardCharsets;
 import org.apache.camel.LoggingLevel;
+import org.apache.camel.ProducerTemplate;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.model.RouteDefinition;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -67,6 +69,9 @@ public class KafkaBridgeRoutes extends RouteBuilder {
 
     @Autowired
     private MessageStore messageStore;
+
+    @Autowired
+    private ProducerTemplate producerTemplate;
 
     @Override
     public void configure() {
@@ -261,7 +266,10 @@ public class KafkaBridgeRoutes extends RouteBuilder {
 
             // Decrypt encrypted bytes -> JSON string. ScadaInboundProcessor
             // logs the RSAE type for traceability.
-            if (config.getEncrypt().isEnabled()) {
+            // bridge.reverse-kafka.encrypt-enabled controls this independently
+            // of the forward-path encrypt flag, so SCADA can publish plain JSON
+            // while TMS→SCADA stays encrypted.
+            if (rev.isEncryptEnabled()) {
                 route.process(e -> {
                     byte[] payload = e.getIn().getBody(byte[].class);
                     e.getIn().setBody(DecryptExample.decrypt(payload));
@@ -271,6 +279,14 @@ public class KafkaBridgeRoutes extends RouteBuilder {
                         new String(e.getIn().getBody(byte[].class), StandardCharsets.UTF_8)));
             }
             route.process(new ScadaInboundProcessor());
+
+            // Fan out alarm state to compacted Kafka topic (flood-control).
+            // Skipped when bridge.alarm-state.enabled=false. Pass-through.
+            if (config.getAlarmState().isEnabled()) {
+                route.process(new AlarmStateFanoutProcessor(
+                        producerTemplate, config.getAlarmState().getTopic()));
+            }
+
             if (rev.isConvertToXml()) {
                 route.process(new JsonToXmlProcessor());
             }
@@ -322,8 +338,18 @@ public class KafkaBridgeRoutes extends RouteBuilder {
         // Camel picks up from the queue → optional JSON→XML → Artemis topic.
         //
         // Configure bridge.inbound[n] to enable.
+        //
+        // Skipped when bridge.reverse-kafka.enabled=true — that path covers
+        // the same SCADA→TMS direction via Connect+Kafka, and running both
+        // would split messages between two competing consumers on the same
+        // RabbitMQ queue.
         // ══════════════════════════════════════════════════════════════════
-        for (BridgeConfig.InboundRoute inb : config.getInbound()) {
+        if (config.getReverseKafka().isEnabled() && !config.getInbound().isEmpty()) {
+            log.info("bridge.reverse-kafka.enabled=true — legacy inbound RabbitMQ→Artemis routes SKIPPED");
+        }
+        for (BridgeConfig.InboundRoute inb : config.getReverseKafka().isEnabled()
+                                              ? java.util.Collections.<BridgeConfig.InboundRoute>emptyList()
+                                              : config.getInbound()) {
             String routeId = "inbound-" + inb.getRoutingKey().replace(".", "-")
                            + "-to-" + inb.getToTopic().replace(".", "-");
 

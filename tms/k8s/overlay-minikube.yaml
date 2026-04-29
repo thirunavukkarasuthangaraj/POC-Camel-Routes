@@ -6,9 +6,9 @@ metadata:
 data:
   SPRING_PROFILES_ACTIVE: "prod"
 
-  ARTEMIS_HOST: "artemis-service.pinkline.svc.cluster.local"
+  ARTEMIS_HOST: "host.minikube.internal"
   ARTEMIS_PORT: "61616"
-  SPRING_ACTIVEMQ_BROKER_URL: "tcp://artemis-service.pinkline.svc.cluster.local:61616"
+  SPRING_ACTIVEMQ_BROKER_URL: "tcp://host.minikube.internal:61616"
   SPRING_ACTIVEMQ_USER: "admin"
   SPRING_ACTIVEMQ_PASSWORD: "admin"
 
@@ -21,12 +21,17 @@ data:
   MQTT_HOST: "rabbitmq-internal.scada.svc.cluster.local"
   MQTT_PORT: "1883"
 
-  # Kafka middleman mode — Camel reads from Kafka topics produced by Connect
-  # source connectors and writes to Kafka topics consumed by Connect sinks.
-  # Camel does NOT integrate with external systems directly in this mode;
-  # broker I/O is delegated to Kafka Connect. See connect/README.md.
+  # Connect-mode: bridge consumes from Kafka tms.raw (populated by
+  # tms-artemis-source connector) and writes back to scada.tms.processed
+  # (drained to Artemis SCADA.TMS.Alarms by scada-artemis-sink connector).
+  # Bridge skips its Artemis-direct loop so messages aren't double-consumed.
   BRIDGE_INPUT_FROM_KAFKA: "true"
   BRIDGE_REVERSE_KAFKA_ENABLED: "true"
+  # SCADA→TMS direction is plain JSON (no encryption). Forward stays encrypted.
+  BRIDGE_REVERSE_KAFKA_ENCRYPT_ENABLED: "false"
+  # Connect owns RabbitMQ + MQTT delivery (per client ask: "Connect path must
+  # be active"). Bridge only transforms (XML→JSON+encrypt) and writes Kafka.
+  # If you re-add rabbitmq,mqtt here you'll get duplicate publishes.
   BRIDGE_PIPELINE: "kafka"
   BRIDGE_ARTEMIS_TOPICS: "TMS.PISInfo,RCS.E2K.TMS.TrafficReportClient,TSInfo,RCS.E2K.TMS.RouteInfo"
   BRIDGE_MONITOR_ENABLED: "true"

@@ -53,6 +53,15 @@ public class DecryptExample {
      */
     public static String decrypt(byte[] payload) throws Exception {
 
+        // 0. Auto-detect base64-encoded String payload (Connect pipeline) vs
+        //    raw bytes (legacy direct MQTT). Base64 contains only printable
+        //    [A-Za-z0-9+/=] chars; any non-printable means raw bytes.
+        if (payload.length > 0 && isLikelyBase64(payload)) {
+            try {
+                payload = Base64.getDecoder().decode(payload);
+            } catch (IllegalArgumentException ignore) { /* not base64, keep as-is */ }
+        }
+
         // 1. Load AES-256 key from environment variable
         String keyB64 = System.getenv(ENV_KEY);
         if (keyB64 == null || keyB64.isBlank()) {
@@ -89,4 +98,12 @@ public class DecryptExample {
         return new String(plaintext, StandardCharsets.UTF_8);
     }
 
+    private static boolean isLikelyBase64(byte[] b) {
+        for (byte x : b) {
+            if (!((x >= 'A' && x <= 'Z') || (x >= 'a' && x <= 'z')
+               || (x >= '0' && x <= '9') || x == '+' || x == '/' || x == '='
+               || x == '\r' || x == '\n')) return false;
+        }
+        return true;
+    }
 }

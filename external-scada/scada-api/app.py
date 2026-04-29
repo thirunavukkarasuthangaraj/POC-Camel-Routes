@@ -40,6 +40,7 @@ ENV vars:
   SCADA_CREATOR_ID default ScateX
 """
 import base64
+import binascii
 import json
 import os
 import random
@@ -121,7 +122,14 @@ stats = {
     "sent_get_all": 0,
     "decrypt_ok":   0,
     "decrypt_fail": 0,
+    "dedup_skipped": 0,
 }
+
+# Last known state per alarm Id — used to drop unchanged repeats from
+# the inbound MQTT stream (flood-control: snapshot replays after a
+# reconnect can re-send the same state SCADA already has).
+# value: (state, timestamp_str)
+last_seen_alarm: dict[str, tuple[str, str]] = {}
 
 sse_queues: list[Queue] = []
 
@@ -166,10 +174,47 @@ def broadcast_sse(event_type: str, payload: dict):
             pass
 
 
+def encrypt_payload(plain_obj: dict) -> bytes:
+    """AES-256-GCM encrypt + base64 encode — same wire format as decrypt_payload
+    (12B IV + ciphertext + 16B GCM tag, base64 wrapped). Mirrors the bridge's
+    EncryptProcessor so the reverse path can decrypt SCADA outbound."""
+    plain = json.dumps(plain_obj).encode("utf-8")
+    if AES_KEY is None:
+        return plain
+    iv = os.urandom(12)
+    ciphertext = AESGCM(AES_KEY).encrypt(iv, plain, None)
+    return base64.b64encode(iv + ciphertext)
+
+
+def is_alarm_state_unchanged(alarm: dict) -> bool:
+    """Return True if (Id, State) matches what we last saw with a non-newer
+    timestamp. Used to silently drop replayed snapshot records that don't
+    change state."""
+    aid = alarm.get("Id")
+    if not aid:
+        return False
+    state = str(alarm.get("State", ""))
+    ts    = str(alarm.get("Timestamp", ""))
+    seen  = last_seen_alarm.get(aid)
+    if seen is None:
+        return False
+    seen_state, seen_ts = seen
+    # Drop only when state is identical AND timestamp is not newer.
+    return state == seen_state and ts <= seen_ts
+
+
 def decrypt_payload(raw: bytes) -> dict:
     if AES_KEY is None:
         return {"raw_base64": base64.b64encode(raw).decode(),
                 "note": "SCADA_AES_KEY not set — can't decrypt"}
+    # Auto-detect base64-encoded payload (Connect pipeline) vs raw bytes
+    # (legacy direct MQTT). Base64 contains only printable [A-Za-z0-9+/=].
+    try:
+        s = raw.decode("ascii")
+        if all(c.isalnum() or c in "+/=\r\n" for c in s):
+            raw = base64.b64decode(s, validate=True)
+    except (UnicodeDecodeError, ValueError, binascii.Error):
+        pass  # not base64, treat as raw bytes
     if len(raw) < 28:
         raise ValueError(f"payload too short: {len(raw)} bytes")
     iv, ciphertext = raw[:12], raw[12:]
@@ -210,6 +255,26 @@ def on_message(client, userdata, msg):
         entry["decoded"] = decoded
         stats["decrypt_ok"] += 1
 
+        # Flood-control dedup: if this is a replayed UpdateAlarm whose
+        # state matches what we've already seen, drop silently.
+        alarm = None
+        if isinstance(decoded, dict):
+            if decoded.get("Type") == "UpdateAlarm":
+                alarm = decoded.get("Alarm")
+            elif "envelope" in decoded:
+                env = decoded.get("envelope") or {}
+                if env.get("Type") == "UpdateAlarm":
+                    alarm = env.get("Alarm")
+        if alarm and is_alarm_state_unchanged(alarm):
+            stats["dedup_skipped"] += 1
+            entry["dedup_skipped"] = True
+            return  # do not store, do not broadcast
+        if alarm and alarm.get("Id"):
+            last_seen_alarm[alarm["Id"]] = (
+                str(alarm.get("State", "")),
+                str(alarm.get("Timestamp", "")),
+            )
+
         # If TMS just sent us a GetAllAlarms, respond with SendAllAlarms
         if isinstance(decoded, dict) and decoded.get("Type") == "GetAllAlarms":
             send_all_alarms()
@@ -224,10 +289,18 @@ def on_message(client, userdata, msg):
 
 
 # ── SCADA publisher — the "sending" side ─────────────────────────────
+# Outbound (SCADA→TMS) goes plain JSON when SCADA_OUTBOUND_ENCRYPT is
+# unset/false. The bridge's bridge.reverse-kafka.encrypt-enabled=false
+# matches this so the reverse path passes the bytes through unchanged.
+SCADA_OUTBOUND_ENCRYPT = os.getenv("SCADA_OUTBOUND_ENCRYPT", "false").lower() == "true"
+
 def publish(topic: str, envelope: dict, kind: str):
     if mqtt_client is None or not runtime["mqtt_connected"]:
         return False
-    payload = json.dumps(envelope).encode("utf-8")
+    if SCADA_OUTBOUND_ENCRYPT:
+        payload = encrypt_payload(envelope)
+    else:
+        payload = json.dumps(envelope).encode("utf-8")
     mqtt_client.publish(topic, payload, qos=0)
     _rate_window_out.append(time.time())
     record = {
