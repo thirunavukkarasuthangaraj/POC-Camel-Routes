@@ -536,492 +536,440 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>PAS-SCADA · Mission Control</title>
+  <title>PAS-SCADA Status</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@100;300;400;700;800&family=Major+Mono+Display&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #050807;
-      --surface: #0a0e0d;
-      --surface-2: rgba(17, 24, 20, 0.5);
-      --line: #1a2522;
-      --line-bright: #2c3a35;
-      --ink: #d8e3df;
-      --ink-dim: #5c6e67;
-      --ink-mute: #344039;
-      --up: #5cffaf;
-      --up-glow: rgba(92, 255, 175, 0.18);
-      --down: #ff4d57;
-      --down-glow: rgba(255, 77, 87, 0.22);
-      --warn: #ffd400;
-      --line-dash: rgba(44, 58, 53, 0.5);
+      --bg: #ffffff;
+      --bg-soft: #fafafa;
+      --border: #e5e5e5;
+      --border-strong: #d4d4d4;
+      --text: #171717;
+      --text-mute: #525252;
+      --text-faint: #a3a3a3;
+      --up: #15803d;
+      --up-bg: #f0fdf4;
+      --down: #b91c1c;
+      --down-bg: #fef2f2;
+      --accent: #1f1f1f;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b0b0b;
+        --bg-soft: #131313;
+        --border: #1f1f1f;
+        --border-strong: #2a2a2a;
+        --text: #ededed;
+        --text-mute: #a3a3a3;
+        --text-faint: #525252;
+        --up: #4ade80;
+        --up-bg: rgba(74, 222, 128, 0.06);
+        --down: #f87171;
+        --down-bg: rgba(248, 113, 113, 0.08);
+        --accent: #ededed;
+      }
     }
 
     body {
-      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
       background: var(--bg);
-      color: var(--ink);
-      font-feature-settings: 'tnum' 1, 'zero' 1;
-      letter-spacing: 0.005em;
-      line-height: 1.45;
-      min-height: 100vh;
-      overflow-x: hidden;
-    }
-
-    /* Subtle scan-line + vignette atmosphere */
-    body::before {
-      content: '';
-      position: fixed; inset: 0; pointer-events: none; z-index: 1;
-      background: repeating-linear-gradient(
-        0deg, transparent 0, transparent 3px,
-        rgba(255,255,255,0.012) 3px, rgba(255,255,255,0.012) 4px);
-    }
-    body::after {
-      content: '';
-      position: fixed; inset: 0; pointer-events: none; z-index: 1;
-      background:
-        radial-gradient(ellipse 80% 60% at 50% 0%, rgba(92, 255, 175, 0.06), transparent 60%),
-        radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.5) 100%);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
     }
 
     main {
-      position: relative; z-index: 2;
-      max-width: 1800px;
+      max-width: 1200px;
       margin: 0 auto;
-      padding: 32px 40px 48px;
+      padding: 32px 24px 64px;
     }
 
-    /* === HEADER === */
+    /* ── Header ── */
     header {
-      display: grid;
-      grid-template-columns: minmax(240px, 1.2fr) 1fr auto auto auto;
-      gap: 32px;
-      align-items: end;
-      padding-bottom: 24px;
-      margin-bottom: 28px;
-      border-bottom: 1px solid var(--line);
-    }
-    .brand { display: flex; flex-direction: column; gap: 6px; }
-    .brand .ident {
-      font-size: 9px; letter-spacing: 0.32em;
-      color: var(--ink-dim); text-transform: uppercase;
-    }
-    .brand h1 {
-      font-family: 'Major Mono Display', 'JetBrains Mono', monospace;
-      font-size: 26px; font-weight: 400;
-      letter-spacing: 0.02em; line-height: 1.05;
-      color: var(--ink);
-    }
-    .brand .sub {
-      font-size: 10px; color: var(--ink-dim);
-      letter-spacing: 0.1em; margin-top: 2px;
-    }
-
-    .clock {
-      display: flex; flex-direction: column; gap: 4px;
-      align-items: flex-end; font-variant-numeric: tabular-nums;
-    }
-    .clock .time {
-      font-size: 22px; font-weight: 100;
-      letter-spacing: 0.04em;
-    }
-    .clock .date {
-      font-size: 9px; color: var(--ink-dim);
-      letter-spacing: 0.25em; text-transform: uppercase;
-    }
-
-    .count {
-      display: flex; flex-direction: column; gap: 2px;
-      align-items: flex-end;
-    }
-    .count .num {
-      font-size: 56px; font-weight: 100; line-height: 1;
-      font-variant-numeric: tabular-nums;
-      color: var(--up);
-      transition: color 0.4s ease;
-    }
-    .count.has-down .num { color: var(--down); }
-    .count .label {
-      font-size: 9px; letter-spacing: 0.3em;
-      color: var(--ink-dim); text-transform: uppercase;
-      transition: color 0.4s ease;
-    }
-    .count.has-down .label { color: var(--down); }
-
-    .alarm-control {
-      display: flex; flex-direction: column; gap: 4px; align-items: flex-end;
-    }
-    .alarm-btn {
-      background: transparent;
-      border: 1px solid var(--line-bright);
-      color: var(--ink);
-      padding: 10px 18px;
-      font-family: inherit;
-      font-size: 10px;
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
-      cursor: pointer;
-      transition: all 0.2s;
-      font-weight: 700;
-    }
-    .alarm-btn:hover { border-color: var(--up); color: var(--up); }
-    .alarm-btn.armed { border-color: var(--up); color: var(--up); }
-    .alarm-btn.armed::before { content: '◉ '; }
-    .alarm-btn.disarmed::before { content: '○ '; }
-    .alarm-status {
-      font-size: 8px; letter-spacing: 0.22em;
-      color: var(--ink-mute); text-transform: uppercase;
-    }
-
-    /* === STATUS BANNER === */
-    .banner {
-      padding: 14px 0;
-      margin-bottom: 32px;
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 16px;
+      flex-wrap: wrap;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
     }
-    .banner .pulse {
-      width: 10px; height: 10px; border-radius: 50%;
+    .title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .title-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
       background: var(--up);
-      box-shadow: 0 0 16px var(--up);
-      animation: pulse 2s infinite ease-in-out;
+      flex-shrink: 0;
     }
-    .banner.alert .pulse {
-      background: var(--down);
-      box-shadow: 0 0 16px var(--down);
-      animation: pulse-fast 0.8s infinite ease-in-out;
+    header.alert .title-dot { background: var(--down); }
+    h1 {
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
     }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50%      { opacity: 0.4; transform: scale(0.8); }
+    .header-meta {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      font-size: 13px;
+      color: var(--text-mute);
     }
-    @keyframes pulse-fast {
-      0%, 100% { opacity: 1; transform: scale(1.1); }
-      50%      { opacity: 0.3; transform: scale(0.7); }
-    }
-    .banner .msg {
-      font-size: 11px; letter-spacing: 0.2em;
-      text-transform: uppercase;
-      color: var(--ink);
-    }
-    .banner.alert .msg { color: var(--down); }
-    .banner .ticker {
-      margin-left: auto; font-size: 9px;
-      color: var(--ink-dim); letter-spacing: 0.15em;
-      text-transform: uppercase;
-    }
-
-    /* === SECTIONS === */
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 28px 32px;
-    }
-    @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
-
-    .section { display: flex; flex-direction: column; gap: 12px; }
-
-    .section-head {
-      display: flex; align-items: baseline; gap: 10px;
-      padding-bottom: 6px;
-      border-bottom: 1px dashed var(--line-dash);
-    }
-    .section-head .num {
-      font-size: 10px; color: var(--ink-mute);
-      letter-spacing: 0.25em;
+    .header-meta .clock {
+      font-family: 'IBM Plex Mono', ui-monospace, monospace;
       font-variant-numeric: tabular-nums;
     }
+    .alarm-btn {
+      background: var(--bg);
+      border: 1px solid var(--border-strong);
+      color: var(--text);
+      padding: 7px 14px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .alarm-btn:hover { border-color: var(--text-mute); }
+    .alarm-btn .led {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--text-faint);
+    }
+    .alarm-btn.armed { border-color: var(--up); color: var(--up); }
+    .alarm-btn.armed .led {
+      background: var(--up);
+      box-shadow: 0 0 0 2px var(--up-bg);
+    }
+
+    /* ── Status banner ── */
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 0;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    .status-row .label { color: var(--text-mute); }
+    .status-row .value { color: var(--text); font-weight: 500; }
+    .status-row.alert .value { color: var(--down); }
+
+    /* ── Summary stats ── */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 32px;
+      background: var(--bg-soft);
+    }
+    .stat {
+      padding: 16px 20px;
+      border-right: 1px solid var(--border);
+    }
+    .stat:last-child { border-right: none; }
+    .stat-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-mute);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .stat-value {
+      font-family: 'IBM Plex Mono', ui-monospace, monospace;
+      font-size: 24px;
+      font-weight: 500;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+    .stat-value.up { color: var(--up); }
+    .stat-value.down { color: var(--down); }
+
+    @media (max-width: 760px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .stat:nth-child(2) { border-right: none; }
+      .stat:nth-child(1), .stat:nth-child(2) { border-bottom: 1px solid var(--border); }
+    }
+
+    /* ── Sections ── */
+    .section { margin-bottom: 32px; }
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
     .section-head h2 {
-      font-size: 11px; font-weight: 800;
-      letter-spacing: 0.28em; text-transform: uppercase;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.005em;
     }
     .section-head .summary {
-      margin-left: auto; font-size: 9px;
-      color: var(--ink-dim); letter-spacing: 0.18em;
-      text-transform: uppercase;
+      font-size: 12px;
+      color: var(--text-mute);
+      font-family: 'IBM Plex Mono', ui-monospace, monospace;
+      font-variant-numeric: tabular-nums;
     }
     .section-head .summary.alert { color: var(--down); }
 
-    /* === CARDS === */
-    .cards {
+    /* ── Probe rows ── */
+    .probes {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-      gap: 8px;
-    }
-
-    .card {
-      position: relative;
-      background: var(--surface-2);
-      border: 1px solid var(--line);
-      padding: 12px 14px;
-      transition: border-color 0.3s ease, background 0.3s ease;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 8px;
       overflow: hidden;
     }
-    .card:hover { border-color: var(--line-bright); }
-    .card[data-state="UP"] { border-left: 2px solid var(--up); }
-    .card[data-state="DOWN"] {
-      border-left: 2px solid var(--down);
-      background: linear-gradient(135deg, var(--down-glow), var(--surface-2));
+    .probe {
+      background: var(--bg);
+      padding: 12px 14px;
+      transition: background 0.15s ease;
+      position: relative;
     }
-    .card[data-just-failed]::before {
-      content: ''; position: absolute; inset: 0; pointer-events: none;
-      background: var(--down); opacity: 0.55;
-      animation: flash-down 0.7s ease-out 4 forwards;
-    }
-    .card[data-just-recovered]::after {
-      content: ''; position: absolute; inset: 0; pointer-events: none;
-      background: var(--up); opacity: 0.4;
-      animation: flash-up 0.9s ease-out forwards;
-    }
-    @keyframes flash-down { 0%,100% { opacity: 0; } 50% { opacity: 0.45; } }
-    @keyframes flash-up   { 0% { opacity: 0.4; } 100% { opacity: 0; } }
+    .probe:hover { background: var(--bg-soft); }
+    .probe[data-state="DOWN"] { background: var(--down-bg); }
 
-    .card-head {
-      display: flex; align-items: center; gap: 8px;
-      margin-bottom: 10px;
+    .probe[data-just-failed] { animation: flash-red 0.5s ease-out 4; }
+    .probe[data-just-recovered] { animation: flash-green 1s ease-out 1; }
+    @keyframes flash-red { 0%,100% { background: var(--down-bg); } 50% { background: rgba(248, 113, 113, 0.25); } }
+    @keyframes flash-green { 0% { background: rgba(74, 222, 128, 0.18); } 100% { background: var(--bg); } }
+
+    .probe-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
     }
-    .card-head .dot {
-      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    .probe-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
       background: var(--up);
-      box-shadow: 0 0 8px var(--up);
-      animation: pulse 2s infinite ease-in-out;
+      flex-shrink: 0;
     }
-    .card[data-state="DOWN"] .dot {
+    .probe[data-state="DOWN"] .probe-dot {
       background: var(--down);
-      box-shadow: 0 0 10px var(--down);
-      animation: pulse-fast 0.8s infinite ease-in-out;
     }
-    .card-head .name {
-      font-size: 10.5px; font-weight: 700;
+    .probe-name {
+      font-size: 13px;
+      font-weight: 500;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .probe-state {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--up);
       letter-spacing: 0.02em;
-      flex: 1; overflow: hidden;
-      text-overflow: ellipsis; white-space: nowrap;
     }
-    .card-head .state {
-      font-size: 8.5px; letter-spacing: 0.24em;
-      color: var(--up); font-weight: 800;
-    }
-    .card[data-state="DOWN"] .state { color: var(--down); }
+    .probe[data-state="DOWN"] .probe-state { color: var(--down); }
 
-    .card-body {
-      display: flex; flex-direction: column; gap: 3px;
-      font-size: 9.5px;
-    }
-    .card-body .row {
-      display: flex; justify-content: space-between; gap: 8px;
-    }
-    .card-body .key {
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--ink-mute);
-      font-size: 8.5px;
-    }
-    .card-body .val {
+    .probe-meta {
+      font-family: 'IBM Plex Mono', ui-monospace, monospace;
+      font-size: 11px;
+      color: var(--text-mute);
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
       font-variant-numeric: tabular-nums;
-      color: var(--ink-dim);
-      text-align: right;
     }
+    .probe-meta .field { display: inline-flex; gap: 4px; }
+    .probe-meta .field-label { color: var(--text-faint); }
 
-    .card-err {
-      margin-top: 8px;
-      padding-top: 8px;
-      border-top: 1px dashed rgba(255, 77, 87, 0.4);
-      font-size: 9.5px;
+    .probe-err {
+      margin-top: 6px;
+      font-family: 'IBM Plex Mono', ui-monospace, monospace;
+      font-size: 11px;
       color: var(--down);
       word-break: break-word;
-      letter-spacing: 0.02em;
+      padding: 6px 8px;
+      background: var(--down-bg);
+      border-radius: 4px;
     }
 
-    /* === LOADING STATE === */
+    /* ── Loading ── */
     .loading {
       grid-column: 1 / -1;
-      padding: 80px 0; text-align: center;
-      font-size: 10px; letter-spacing: 0.3em;
-      color: var(--ink-dim); text-transform: uppercase;
+      padding: 60px 0;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-mute);
     }
-    .loading::after {
-      content: ' ▮';
-      animation: blink 1s steps(2) infinite;
-    }
-    @keyframes blink { 50% { opacity: 0; } }
 
-    /* === FOOTER === */
+    /* ── Footer ── */
     footer {
-      margin-top: 48px; padding-top: 16px;
-      border-top: 1px solid var(--line);
-      display: flex; justify-content: space-between; align-items: center;
-      font-size: 9px; color: var(--ink-mute);
-      letter-spacing: 0.25em; text-transform: uppercase;
+      margin-top: 48px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--text-faint);
     }
     footer a {
-      color: var(--ink-dim); text-decoration: none;
-      letter-spacing: 0.25em;
-      padding: 4px 0;
-      border-bottom: 1px solid transparent;
-      transition: all 0.2s;
+      color: var(--text-mute);
+      text-decoration: none;
+      margin-left: 16px;
     }
-    footer a:hover { color: var(--up); border-bottom-color: var(--up); }
-    footer .dot-sep { margin: 0 14px; color: var(--ink-mute); }
+    footer a:hover { color: var(--text); text-decoration: underline; }
 
-    @media (max-width: 900px) {
-      header { grid-template-columns: 1fr 1fr; gap: 20px; }
-      .clock, .count, .alarm-control { align-items: flex-start; }
-      main { padding: 20px 18px 32px; }
-      .brand h1 { font-size: 20px; }
+    @media (max-width: 600px) {
+      header { flex-direction: column; align-items: flex-start; }
+      .header-meta { margin-left: 0; flex-wrap: wrap; gap: 12px; }
     }
   </style>
 </head>
 <body>
   <main>
-    <header>
-      <div class="brand">
-        <span class="ident">PAS · SCADA · KAFKA · BRIDGE</span>
-        <h1>Mission Control</h1>
-        <span class="sub">live operational health · 30s probe cycle</span>
+    <header id="header">
+      <div class="title">
+        <span class="title-dot"></span>
+        <h1>PAS-SCADA Status</h1>
       </div>
-      <div></div>
-      <div class="clock">
-        <span class="time" id="clock-time">--:--:--</span>
-        <span class="date" id="clock-date">----</span>
-      </div>
-      <div class="count" id="counter">
-        <span class="num" id="count-num">--</span>
-        <span class="label" id="count-label">probes</span>
-      </div>
-      <div class="alarm-control">
-        <button class="alarm-btn disarmed" id="alarm-toggle">Enable alarm</button>
-        <span class="alarm-status" id="alarm-status">Click to arm sound</span>
+      <div class="header-meta">
+        <span class="clock" id="clock">--:--:--</span>
+        <button class="alarm-btn disarmed" id="alarm-toggle">
+          <span class="led"></span>
+          <span id="alarm-label">Sound off</span>
+        </button>
       </div>
     </header>
 
-    <div class="banner" id="banner">
-      <span class="pulse"></span>
-      <span class="msg" id="banner-msg">Initialising…</span>
-      <span class="ticker" id="ticker">— sync pending</span>
+    <div class="status-row" id="status-row">
+      <span class="label">Status:</span>
+      <span class="value" id="status-msg">Initialising…</span>
+      <span class="label" id="ticker" style="margin-left:auto;font-size:12px;">— sync pending</span>
     </div>
 
-    <div class="grid" id="grid">
-      <div class="loading">Loading probe state</div>
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-label">Up</div>
+        <div class="stat-value up" id="stat-up">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Down</div>
+        <div class="stat-value down" id="stat-down">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Total components</div>
+        <div class="stat-value" id="stat-total">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Probe interval</div>
+        <div class="stat-value" id="stat-interval">30s</div>
+      </div>
+    </div>
+
+    <div id="grid">
+      <div class="loading">Loading probe state…</div>
     </div>
 
     <footer>
-      <span>PAS-SCADA · Mission Control · 5s refresh</span>
+      <span>Refreshes every 5 seconds · alerts after 3 consecutive failures</span>
       <div>
-        <a href="/state">JSON state</a>
-        <span class="dot-sep">/</span>
+        <a href="/state">JSON</a>
         <a href="/docs">API</a>
-        <span class="dot-sep">/</span>
         <a href="/healthz">healthz</a>
       </div>
     </footer>
   </main>
 
   <script>
-    // ─── Section grouping ────────────────────────────────────────
     const SECTIONS = [
-      { id: 'pipeline',   num: '01', title: 'TMS Pipeline',     match: n => /^(artemis-|kafka$|zookeeper$)/.test(n) },
-      { id: 'bridge',     num: '02', title: 'Bridge & Workers', match: n => /^(pas-scada-(bridge|demo|monitor)|kafdrop|kafka-connect)$/.test(n) },
-      { id: 'connectors', num: '03', title: 'Kafka Connect',    match: n => /^connector-/.test(n) },
-      { id: 'scada',      num: '04', title: 'SCADA Side',       match: n => /^(rabbitmq-|scada-api)/.test(n) },
+      { id: 'pipeline',   title: 'TMS Pipeline',     match: n => /^(artemis-|kafka$|zookeeper$)/.test(n) },
+      { id: 'bridge',     title: 'Bridge & Workers', match: n => /^(pas-scada-(bridge|demo|monitor)|kafdrop|kafka-connect)$/.test(n) },
+      { id: 'connectors', title: 'Kafka Connect',    match: n => /^connector-/.test(n) },
+      { id: 'scada',      title: 'SCADA',            match: n => /^(rabbitmq-|scada-api)/.test(n) },
     ];
 
-    // ─── Audio (Web Audio API — synthesized 3-tone alarm) ────────
-    let audioCtx = null;
-    let alarmInterval = null;
+    /* ── Audio (synthesized via Web Audio API) ── */
+    let audioCtx = null, alarmInterval = null;
     let alarmArmed = localStorage.getItem('pas-alarm-armed') === '1';
-
     const ensureAudio = () => audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
-
     function beep(freq, duration, when = 0) {
       const ctx = ensureAudio();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = freq;
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = freq;
       const t0 = ctx.currentTime + when;
       gain.gain.setValueAtTime(0, t0);
       gain.gain.linearRampToValueAtTime(0.22, t0 + 0.02);
       gain.gain.linearRampToValueAtTime(0, t0 + duration);
       osc.connect(gain).connect(ctx.destination);
-      osc.start(t0);
-      osc.stop(t0 + duration);
+      osc.start(t0); osc.stop(t0 + duration);
     }
     const playAlarm = () => {
       if (!alarmArmed) return;
-      beep(880, 0.18, 0.00);
-      beep(740, 0.18, 0.22);
-      beep(600, 0.28, 0.44);
+      beep(880, 0.18, 0); beep(740, 0.18, 0.22); beep(600, 0.28, 0.44);
     };
-    const startAlarm = () => {
-      stopAlarm();
-      playAlarm();
-      alarmInterval = setInterval(playAlarm, 4000);
-    };
-    const stopAlarm = () => {
-      if (alarmInterval) { clearInterval(alarmInterval); alarmInterval = null; }
-    };
+    const startAlarm = () => { stopAlarm(); playAlarm(); alarmInterval = setInterval(playAlarm, 4000); };
+    const stopAlarm  = () => { if (alarmInterval) { clearInterval(alarmInterval); alarmInterval = null; } };
 
-    // ─── Alarm toggle ────────────────────────────────────────────
     const toggleBtn = document.getElementById('alarm-toggle');
-    const toggleStatus = document.getElementById('alarm-status');
+    const toggleLabel = document.getElementById('alarm-label');
     function renderToggle() {
       if (alarmArmed) {
-        toggleBtn.textContent = 'Alarm armed';
-        toggleBtn.className = 'alarm-btn armed';
-        toggleStatus.textContent = 'Audio alerts active';
+        toggleBtn.classList.add('armed'); toggleBtn.classList.remove('disarmed');
+        toggleLabel.textContent = 'Sound on';
       } else {
-        toggleBtn.textContent = 'Enable alarm';
-        toggleBtn.className = 'alarm-btn disarmed';
-        toggleStatus.textContent = 'Click to arm sound';
+        toggleBtn.classList.remove('armed'); toggleBtn.classList.add('disarmed');
+        toggleLabel.textContent = 'Sound off';
       }
     }
     toggleBtn.addEventListener('click', () => {
       alarmArmed = !alarmArmed;
       localStorage.setItem('pas-alarm-armed', alarmArmed ? '1' : '0');
       renderToggle();
-      if (alarmArmed) {
-        ensureAudio();
-        beep(660, 0.15, 0); // confirmation chirp
-      } else {
-        stopAlarm();
-      }
+      if (alarmArmed) { ensureAudio(); beep(660, 0.12, 0); }
+      else stopAlarm();
     });
     renderToggle();
 
-    // ─── Clock ───────────────────────────────────────────────────
-    const clockTime = document.getElementById('clock-time');
-    const clockDate = document.getElementById('clock-date');
-    function updateClock() {
-      const now = new Date();
-      clockTime.textContent = now.toTimeString().slice(0, 8);
-      const dStr = now.toLocaleDateString('en-GB',
-        { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
-      clockDate.textContent = dStr.toUpperCase().replace(/,/g, ' ·');
-    }
-    updateClock();
-    setInterval(updateClock, 1000);
+    /* ── Clock ── */
+    const clockEl = document.getElementById('clock');
+    setInterval(() => clockEl.textContent = new Date().toTimeString().slice(0, 8), 1000);
+    clockEl.textContent = new Date().toTimeString().slice(0, 8);
 
-    // ─── State + render ──────────────────────────────────────────
+    /* ── Render ── */
     const grid = document.getElementById('grid');
-    const banner = document.getElementById('banner');
-    const bannerMsg = document.getElementById('banner-msg');
-    const counter = document.getElementById('counter');
-    const countNum = document.getElementById('count-num');
-    const countLabel = document.getElementById('count-label');
-    let lastStates = {};
-    let firstRender = true;
+    const header = document.getElementById('header');
+    const statusRow = document.getElementById('status-row');
+    const statusMsg = document.getElementById('status-msg');
+    const ticker = document.getElementById('ticker');
+    const statUp = document.getElementById('stat-up');
+    const statDown = document.getElementById('stat-down');
+    const statTotal = document.getElementById('stat-total');
+    let lastStates = {}, firstRender = true, lastSync = Date.now();
 
-    const escapeHtml = s => String(s).replace(/[&<>"']/g, ch => ({
-      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[ch]));
+    const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const fmtTime = v => {
       if (!v) return '—';
-      const s = String(v);
-      const m = s.match(/T(\d{2}:\d{2}:\d{2})/);
-      return m ? m[1] : s.slice(0, 8);
+      const m = String(v).match(/T(\d{2}:\d{2}:\d{2})/);
+      return m ? m[1] : String(v).slice(0, 8);
     };
 
     function categorize(state) {
@@ -1029,36 +977,29 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
       const orphans = [];
       Object.keys(state).sort().forEach(name => {
         const item = { name, ...state[name] };
-        let placed = false;
-        for (const b of buckets) {
-          if (b.match(name)) { b.items.push(item); placed = true; break; }
-        }
-        if (!placed) orphans.push(item);
+        const target = buckets.find(b => b.match(name));
+        if (target) target.items.push(item); else orphans.push(item);
       });
-      if (orphans.length) buckets.push({ id: 'other', num: '99', title: 'Other', items: orphans });
+      if (orphans.length) buckets.push({ id: 'other', title: 'Other', items: orphans });
       return buckets;
     }
 
-    function renderCard(c, justFailed, justRecovered) {
+    function renderProbe(c, justFailed, justRecovered) {
       const errBlock = c.current_state === 'DOWN' && c.last_error
-        ? `<div class="card-err">${escapeHtml(c.last_error)}</div>`
-        : '';
-      const failAttr = justFailed ? 'data-just-failed' : '';
-      const recAttr  = justRecovered ? 'data-just-recovered' : '';
+        ? `<div class="probe-err">${escapeHtml(c.last_error)}</div>` : '';
       return `
-        <div class="card" data-state="${c.current_state}" data-name="${escapeHtml(c.name)}" ${failAttr} ${recAttr}>
-          <div class="card-head">
-            <span class="dot"></span>
-            <span class="name">${escapeHtml(c.name)}</span>
-            <span class="state">${c.current_state}</span>
+        <div class="probe" data-state="${c.current_state}" ${justFailed ? 'data-just-failed' : ''} ${justRecovered ? 'data-just-recovered' : ''}>
+          <div class="probe-head">
+            <span class="probe-dot"></span>
+            <span class="probe-name">${escapeHtml(c.name)}</span>
+            <span class="probe-state">${c.current_state}</span>
           </div>
-          <div class="card-body">
-            <div class="row"><span class="key">last ok</span><span class="val">${fmtTime(c.last_ok_at)}</span></div>
-            <div class="row"><span class="key">last fail</span><span class="val">${fmtTime(c.last_fail_at)}</span></div>
-            <div class="row"><span class="key">since</span><span class="val">${fmtTime(c.last_state_change)}</span></div>
-            <div class="row"><span class="key">streak</span><span class="val">${c.consecutive_fails || 0}f / ${c.consecutive_passes || 0}p</span></div>
-            ${errBlock}
+          <div class="probe-meta">
+            <span class="field"><span class="field-label">last ok</span>${fmtTime(c.last_ok_at)}</span>
+            <span class="field"><span class="field-label">since</span>${fmtTime(c.last_state_change)}</span>
+            <span class="field"><span class="field-label">streak</span>${c.consecutive_passes || 0}</span>
           </div>
+          ${errBlock}
         </div>`;
     }
 
@@ -1066,52 +1007,52 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
       const buckets = categorize(state);
       let html = '';
       for (const b of buckets) {
-        const total = b.items.length;
+        if (!b.items.length) continue;
         const downs = b.items.filter(i => i.current_state === 'DOWN').length;
-        const ups   = total - downs;
+        const ups = b.items.length - downs;
         const summary = downs > 0
-          ? `<span class="summary alert">${ups}/${total} OK · ${downs} DOWN</span>`
-          : `<span class="summary">${total} green</span>`;
-        const cards = b.items.map(item => {
+          ? `<span class="summary alert">${ups} up · ${downs} down</span>`
+          : `<span class="summary">${ups} up</span>`;
+        const probes = b.items.map(item => {
           const prev = lastStates[item.name];
           const justFailed   = !firstRender && prev && prev !== 'DOWN' && item.current_state === 'DOWN';
           const justRecovered = !firstRender && prev && prev !== 'UP'   && item.current_state === 'UP';
-          return renderCard(item, justFailed, justRecovered);
+          return renderProbe(item, justFailed, justRecovered);
         }).join('');
         html += `
           <section class="section">
             <div class="section-head">
-              <span class="num">${b.num}</span>
               <h2>${b.title}</h2>
               ${summary}
             </div>
-            <div class="cards">${cards}</div>
+            <div class="probes">${probes}</div>
           </section>`;
       }
       grid.innerHTML = html;
       firstRender = false;
     }
 
-    function updateBanner(state) {
+    function updateStats(state) {
       const items = Object.values(state);
       const total = items.length;
-      const downItems = items.filter(i => i.current_state === 'DOWN');
-      const ups = total - downItems.length;
+      const downs = items.filter(i => i.current_state === 'DOWN');
+      const ups = total - downs.length;
+      statUp.textContent = ups;
+      statDown.textContent = downs.length;
+      statTotal.textContent = total;
 
-      countNum.textContent = downItems.length === 0 ? ups : downItems.length;
-      countLabel.textContent = downItems.length === 0 ? 'all green' : 'critical';
-
-      if (downItems.length === 0) {
-        banner.classList.remove('alert');
-        counter.classList.remove('has-down');
-        bannerMsg.textContent = 'All systems nominal';
-        document.title = 'PAS-SCADA · all green';
+      if (downs.length === 0) {
+        header.classList.remove('alert');
+        statusRow.classList.remove('alert');
+        statusMsg.textContent = 'All systems operational';
+        document.title = 'PAS-SCADA · all up';
       } else {
-        banner.classList.add('alert');
-        counter.classList.add('has-down');
-        const names = downItems.map(d => d.name).join(' · ');
-        bannerMsg.textContent = `${downItems.length} system${downItems.length === 1 ? '' : 's'} down — ${names}`;
-        document.title = `🔴 (${downItems.length}) PAS-SCADA — ${downItems.map(d => d.name).join(', ')}`;
+        header.classList.add('alert');
+        statusRow.classList.add('alert');
+        statusMsg.textContent = downs.length === 1
+          ? `1 system down — ${downs[0].name}`
+          : `${downs.length} systems down — ${downs.map(d => d.name).join(', ')}`;
+        document.title = `(${downs.length} DOWN) PAS-SCADA`;
       }
     }
 
@@ -1125,16 +1066,9 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         if (cur === 'DOWN') downSet.add(name);
         lastStates[name] = cur;
       }
-      if (downSet.size === 0) {
-        stopAlarm();
-      } else if (newDownAppeared) {
-        startAlarm();
-      }
+      if (downSet.size === 0) stopAlarm();
+      else if (newDownAppeared) startAlarm();
     }
-
-    // ─── Poll loop ───────────────────────────────────────────────
-    let lastSync = Date.now();
-    const ticker = document.getElementById('ticker');
 
     async function poll() {
       try {
@@ -1143,18 +1077,17 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         const state = await r.json();
         detectAndAlert(state);
         render(state);
-        updateBanner(state);
+        updateStats(state);
         lastSync = Date.now();
         ticker.textContent = '— synced just now';
       } catch (e) {
         ticker.textContent = '— sync failed: ' + e.message;
       }
     }
-    function refreshTicker() {
-      const t = Math.floor((Date.now() - lastSync) / 1000);
-      if (t >= 2) ticker.textContent = `— synced ${t}s ago`;
-    }
-    setInterval(refreshTicker, 1000);
+    setInterval(() => {
+      const s = Math.floor((Date.now() - lastSync) / 1000);
+      if (s >= 2) ticker.textContent = `— synced ${s}s ago`;
+    }, 1000);
     poll();
     setInterval(poll, 5000);
   </script>
