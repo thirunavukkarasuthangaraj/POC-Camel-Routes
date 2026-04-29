@@ -6,7 +6,7 @@ metadata:
   namespace: pinkline
 data:
   # synthetic = always works (default), live = real data from bridge + monitor
-  MODE:             "synthetic"
+  MODE:             "live"
   BRIDGE_URL:       "http://pas-scada-bridge.pinkline.svc.cluster.local:8085"
   MONITOR_URL:      "http://pas-scada-monitor.pinkline.svc.cluster.local:8080"
   SYNTH_INTERVAL_S: "2.5"

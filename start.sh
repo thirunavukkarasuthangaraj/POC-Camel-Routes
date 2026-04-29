@@ -63,11 +63,22 @@ docker build -q \
   "$SCRIPT_DIR/external-scada/scada-api/" >/dev/null
 ok "scada-api image built"
 
+# ── 4b. Build Monitor + Demo images ─────────────────────────────────────
+log "Building Monitor image"
+docker build -q -t pinkline/pas-scada-monitor:latest "$SCRIPT_DIR/monitor/" >/dev/null
+ok "monitor image built"
+
+log "Building Demo image"
+docker build -q -t pinkline/pas-scada-demo:1.0.0 "$SCRIPT_DIR/demo/" >/dev/null
+ok "demo image built"
+
 # ── 5. Load images into minikube ────────────────────────────────────────
 log "Loading images into minikube"
 IMAGES=(
   pinkline/pas-scada-bridge:latest
   pinkline/pas-scada-connect:latest
+  pinkline/pas-scada-monitor:latest
+  pinkline/pas-scada-demo:1.0.0
   ghcr.io/thirunavukkarasuthangaraj/pas-scada-api:latest
   obsidiandynamics/kafdrop:4.0.1
   confluentinc/cp-zookeeper:7.5.0
@@ -206,6 +217,33 @@ kubectl apply -f "$SCRIPT_DIR/connect/k8s/40-job-register.yaml"
 kubectl -n pinkline wait --for=condition=complete job/register-connectors --timeout=180s \
   || warn "register-connectors job did not complete cleanly — check: kubectl -n pinkline logs job/register-connectors"
 
+# ── 11b. Apply Monitor + Demo ───────────────────────────────────────────
+log "Applying Monitor manifests"
+kubectl apply -f "$SCRIPT_DIR/monitor/k8s/30-pvc.yaml"
+kubectl apply -f "$SCRIPT_DIR/monitor/k8s/20-secret.yaml"
+kubectl apply -f "$SCRIPT_DIR/monitor/k8s/overlay-minikube.yaml"
+kubectl apply -f "$SCRIPT_DIR/monitor/k8s/40-deployment.yaml"
+kubectl -n pinkline patch deploy pas-scada-monitor --type=json \
+  -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"IfNotPresent"}]' \
+  2>/dev/null \
+  || kubectl -n pinkline patch deploy pas-scada-monitor --type=json \
+       -p='[{"op":"add","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"IfNotPresent"}]' \
+       2>/dev/null || true
+kubectl -n pinkline rollout restart deploy/pas-scada-monitor 2>/dev/null || true
+ok "Monitor applied"
+
+log "Applying Demo manifests"
+kubectl apply -f "$SCRIPT_DIR/demo/k8s/10-configmap.yaml"
+kubectl apply -f "$SCRIPT_DIR/demo/k8s/20-deployment.yaml"
+kubectl -n pinkline patch deploy pas-scada-demo --type=json \
+  -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"IfNotPresent"}]' \
+  2>/dev/null \
+  || kubectl -n pinkline patch deploy pas-scada-demo --type=json \
+       -p='[{"op":"add","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"IfNotPresent"}]' \
+       2>/dev/null || true
+kubectl -n pinkline rollout restart deploy/pas-scada-demo 2>/dev/null || true
+ok "Demo applied"
+
 # ── 12. Status + URLs ───────────────────────────────────────────────────
 log "Final status"
 kubectl -n pinkline get pods
@@ -226,6 +264,14 @@ cat <<EOF
 
   Kafka Connect:    kubectl -n pinkline port-forward svc/kafka-connect 8083:8083
                     → http://localhost:8083/connectors
+
+  Health monitor:   kubectl -n pinkline port-forward svc/pas-scada-monitor 8080:8080
+                    → http://localhost:8080            (live up/down dashboard)
+                    → http://localhost:8080/state      (JSON of all probes)
+
+  Customer demo:    kubectl -n pinkline port-forward svc/pas-scada-demo 8090:8090
+                    → http://localhost:8090            (live data table)
+                    → http://localhost:8090/flow       (animated flow diagram)
 
   RabbitMQ admin:   kubectl -n scada port-forward svc/rabbitmq-internal 15672:15672
                     → http://localhost:15672  (thiru/password)

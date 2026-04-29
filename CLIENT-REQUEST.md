@@ -42,6 +42,21 @@ So the layout is:
 | Bridge (Camel) | k8s `pinkline` | `pinkline/pas-scada-bridge:latest` |
 | RabbitMQ | k8s `scada` | `rabbitmq:3.12-management` |
 | SCADA API (mock) | k8s `scada` | `ghcr.io/thirunavukkarasuthangaraj/pas-scada-api:latest` |
+| Health monitor | k8s `pinkline` (deployable anywhere) | `pinkline/pas-scada-monitor:latest` |
+| Customer demo | k8s `pinkline` (deployable anywhere) | `pinkline/pas-scada-demo:1.0.0` |
+
+## Observability
+
+- **Monitor** (`pinkline/pas-scada-monitor`) — FastAPI dashboard at port 8080.
+  Probes 19 things on a 30 s cycle: every infra component (Artemis, Kafka,
+  Zookeeper, RabbitMQ, Kafdrop, scada-api, bridge, demo) plus all 7 Connect
+  connector statuses. Email alert on DOWN/RECOVERY (SMTP_USER/PASS in
+  `monitor/k8s/20-secret.yaml` are placeholders — replace before going live).
+- **Demo** (`pinkline/pas-scada-demo`) — FastAPI live data table + animated
+  flow diagram at port 8090. `MODE=live` proxies real bridge messages.
+
+Both can run on Server 1, Server 2, or a separate operator host — they only
+need network access to the services they probe.
 
 ## Connectors registered (full Connect path)
 
