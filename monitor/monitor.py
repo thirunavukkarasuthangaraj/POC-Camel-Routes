@@ -532,130 +532,643 @@ def state_endpoint():
 
 # ─── Visual dashboard ─────────────────────────────────────────────
 
-DASHBOARD_TEMPLATE = """<!DOCTYPE html>
+DASHBOARD_HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="refresh" content="30">
-  <title>PAS-SCADA Monitor</title>
+  <title>PAS-SCADA · Mission Control</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@100;300;400;700;800&family=Major+Mono+Display&display=swap" rel="stylesheet">
   <style>
-    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{
-      font-family: 'Segoe UI', -apple-system, sans-serif;
-      background: #0d1117; color: #e6edf3; padding: 24px; line-height: 1.5;
-    }}
-    header {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; }}
-    h1 {{ font-size: 22px; color: #58a6ff; }}
-    .summary {{ font-size: 12px; color: #8b949e; }}
-    .summary .up {{ color: #3fb950; font-weight: 700; }}
-    .summary .down {{ color: #f85149; font-weight: 700; }}
-    .grid {{
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #050807;
+      --surface: #0a0e0d;
+      --surface-2: rgba(17, 24, 20, 0.5);
+      --line: #1a2522;
+      --line-bright: #2c3a35;
+      --ink: #d8e3df;
+      --ink-dim: #5c6e67;
+      --ink-mute: #344039;
+      --up: #5cffaf;
+      --up-glow: rgba(92, 255, 175, 0.18);
+      --down: #ff4d57;
+      --down-glow: rgba(255, 77, 87, 0.22);
+      --warn: #ffd400;
+      --line-dash: rgba(44, 58, 53, 0.5);
+    }
+
+    body {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      background: var(--bg);
+      color: var(--ink);
+      font-feature-settings: 'tnum' 1, 'zero' 1;
+      letter-spacing: 0.005em;
+      line-height: 1.45;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Subtle scan-line + vignette atmosphere */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; pointer-events: none; z-index: 1;
+      background: repeating-linear-gradient(
+        0deg, transparent 0, transparent 3px,
+        rgba(255,255,255,0.012) 3px, rgba(255,255,255,0.012) 4px);
+    }
+    body::after {
+      content: '';
+      position: fixed; inset: 0; pointer-events: none; z-index: 1;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 0%, rgba(92, 255, 175, 0.06), transparent 60%),
+        radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.5) 100%);
+    }
+
+    main {
+      position: relative; z-index: 2;
+      max-width: 1800px;
+      margin: 0 auto;
+      padding: 32px 40px 48px;
+    }
+
+    /* === HEADER === */
+    header {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 12px;
-    }}
-    .card {{
-      background: #161b22; border: 1px solid #30363d; border-radius: 8px;
-      padding: 14px 16px;
-    }}
-    .card.up   {{ border-left: 4px solid #3fb950; }}
-    .card.down {{ border-left: 4px solid #f85149; }}
-    .card.unknown {{ border-left: 4px solid #6e7681; }}
-    .card-head {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }}
-    .name {{ font-weight: 700; font-size: 14px; color: #e6edf3; }}
-    .status {{ font-size: 11px; font-weight: 700; letter-spacing: 1px; padding: 2px 8px; border-radius: 4px; }}
-    .status.up   {{ background: #23863633; color: #3fb950; }}
-    .status.down {{ background: #f8514933; color: #f85149; }}
-    .status.unknown {{ background: #6e768133; color: #8b949e; }}
-    .meta {{ color: #8b949e; font-size: 11px; margin-top: 4px; font-family: 'JetBrains Mono', monospace; }}
-    .meta .label {{ display: inline-block; width: 70px; color: #6e7681; }}
-    .err {{ color: #f85149; font-size: 11px; margin-top: 6px; font-family: 'JetBrains Mono', monospace; word-break: break-all; }}
-    .empty {{ color: #6e7681; padding: 40px; text-align: center; font-size: 13px; }}
-    footer {{ margin-top: 24px; color: #6e7681; font-size: 11px; text-align: center; }}
-    a {{ color: #58a6ff; text-decoration: none; }}
-    a:hover {{ text-decoration: underline; }}
+      grid-template-columns: minmax(240px, 1.2fr) 1fr auto auto auto;
+      gap: 32px;
+      align-items: end;
+      padding-bottom: 24px;
+      margin-bottom: 28px;
+      border-bottom: 1px solid var(--line);
+    }
+    .brand { display: flex; flex-direction: column; gap: 6px; }
+    .brand .ident {
+      font-size: 9px; letter-spacing: 0.32em;
+      color: var(--ink-dim); text-transform: uppercase;
+    }
+    .brand h1 {
+      font-family: 'Major Mono Display', 'JetBrains Mono', monospace;
+      font-size: 26px; font-weight: 400;
+      letter-spacing: 0.02em; line-height: 1.05;
+      color: var(--ink);
+    }
+    .brand .sub {
+      font-size: 10px; color: var(--ink-dim);
+      letter-spacing: 0.1em; margin-top: 2px;
+    }
+
+    .clock {
+      display: flex; flex-direction: column; gap: 4px;
+      align-items: flex-end; font-variant-numeric: tabular-nums;
+    }
+    .clock .time {
+      font-size: 22px; font-weight: 100;
+      letter-spacing: 0.04em;
+    }
+    .clock .date {
+      font-size: 9px; color: var(--ink-dim);
+      letter-spacing: 0.25em; text-transform: uppercase;
+    }
+
+    .count {
+      display: flex; flex-direction: column; gap: 2px;
+      align-items: flex-end;
+    }
+    .count .num {
+      font-size: 56px; font-weight: 100; line-height: 1;
+      font-variant-numeric: tabular-nums;
+      color: var(--up);
+      transition: color 0.4s ease;
+    }
+    .count.has-down .num { color: var(--down); }
+    .count .label {
+      font-size: 9px; letter-spacing: 0.3em;
+      color: var(--ink-dim); text-transform: uppercase;
+      transition: color 0.4s ease;
+    }
+    .count.has-down .label { color: var(--down); }
+
+    .alarm-control {
+      display: flex; flex-direction: column; gap: 4px; align-items: flex-end;
+    }
+    .alarm-btn {
+      background: transparent;
+      border: 1px solid var(--line-bright);
+      color: var(--ink);
+      padding: 10px 18px;
+      font-family: inherit;
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: 700;
+    }
+    .alarm-btn:hover { border-color: var(--up); color: var(--up); }
+    .alarm-btn.armed { border-color: var(--up); color: var(--up); }
+    .alarm-btn.armed::before { content: '◉ '; }
+    .alarm-btn.disarmed::before { content: '○ '; }
+    .alarm-status {
+      font-size: 8px; letter-spacing: 0.22em;
+      color: var(--ink-mute); text-transform: uppercase;
+    }
+
+    /* === STATUS BANNER === */
+    .banner {
+      padding: 14px 0;
+      margin-bottom: 32px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .banner .pulse {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--up);
+      box-shadow: 0 0 16px var(--up);
+      animation: pulse 2s infinite ease-in-out;
+    }
+    .banner.alert .pulse {
+      background: var(--down);
+      box-shadow: 0 0 16px var(--down);
+      animation: pulse-fast 0.8s infinite ease-in-out;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.4; transform: scale(0.8); }
+    }
+    @keyframes pulse-fast {
+      0%, 100% { opacity: 1; transform: scale(1.1); }
+      50%      { opacity: 0.3; transform: scale(0.7); }
+    }
+    .banner .msg {
+      font-size: 11px; letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--ink);
+    }
+    .banner.alert .msg { color: var(--down); }
+    .banner .ticker {
+      margin-left: auto; font-size: 9px;
+      color: var(--ink-dim); letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    /* === SECTIONS === */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 28px 32px;
+    }
+    @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+
+    .section { display: flex; flex-direction: column; gap: 12px; }
+
+    .section-head {
+      display: flex; align-items: baseline; gap: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed var(--line-dash);
+    }
+    .section-head .num {
+      font-size: 10px; color: var(--ink-mute);
+      letter-spacing: 0.25em;
+      font-variant-numeric: tabular-nums;
+    }
+    .section-head h2 {
+      font-size: 11px; font-weight: 800;
+      letter-spacing: 0.28em; text-transform: uppercase;
+    }
+    .section-head .summary {
+      margin-left: auto; font-size: 9px;
+      color: var(--ink-dim); letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+    .section-head .summary.alert { color: var(--down); }
+
+    /* === CARDS === */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 8px;
+    }
+
+    .card {
+      position: relative;
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      padding: 12px 14px;
+      transition: border-color 0.3s ease, background 0.3s ease;
+      overflow: hidden;
+    }
+    .card:hover { border-color: var(--line-bright); }
+    .card[data-state="UP"] { border-left: 2px solid var(--up); }
+    .card[data-state="DOWN"] {
+      border-left: 2px solid var(--down);
+      background: linear-gradient(135deg, var(--down-glow), var(--surface-2));
+    }
+    .card[data-just-failed]::before {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: var(--down); opacity: 0.55;
+      animation: flash-down 0.7s ease-out 4 forwards;
+    }
+    .card[data-just-recovered]::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: var(--up); opacity: 0.4;
+      animation: flash-up 0.9s ease-out forwards;
+    }
+    @keyframes flash-down { 0%,100% { opacity: 0; } 50% { opacity: 0.45; } }
+    @keyframes flash-up   { 0% { opacity: 0.4; } 100% { opacity: 0; } }
+
+    .card-head {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 10px;
+    }
+    .card-head .dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+      background: var(--up);
+      box-shadow: 0 0 8px var(--up);
+      animation: pulse 2s infinite ease-in-out;
+    }
+    .card[data-state="DOWN"] .dot {
+      background: var(--down);
+      box-shadow: 0 0 10px var(--down);
+      animation: pulse-fast 0.8s infinite ease-in-out;
+    }
+    .card-head .name {
+      font-size: 10.5px; font-weight: 700;
+      letter-spacing: 0.02em;
+      flex: 1; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap;
+    }
+    .card-head .state {
+      font-size: 8.5px; letter-spacing: 0.24em;
+      color: var(--up); font-weight: 800;
+    }
+    .card[data-state="DOWN"] .state { color: var(--down); }
+
+    .card-body {
+      display: flex; flex-direction: column; gap: 3px;
+      font-size: 9.5px;
+    }
+    .card-body .row {
+      display: flex; justify-content: space-between; gap: 8px;
+    }
+    .card-body .key {
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--ink-mute);
+      font-size: 8.5px;
+    }
+    .card-body .val {
+      font-variant-numeric: tabular-nums;
+      color: var(--ink-dim);
+      text-align: right;
+    }
+
+    .card-err {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dashed rgba(255, 77, 87, 0.4);
+      font-size: 9.5px;
+      color: var(--down);
+      word-break: break-word;
+      letter-spacing: 0.02em;
+    }
+
+    /* === LOADING STATE === */
+    .loading {
+      grid-column: 1 / -1;
+      padding: 80px 0; text-align: center;
+      font-size: 10px; letter-spacing: 0.3em;
+      color: var(--ink-dim); text-transform: uppercase;
+    }
+    .loading::after {
+      content: ' ▮';
+      animation: blink 1s steps(2) infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* === FOOTER === */
+    footer {
+      margin-top: 48px; padding-top: 16px;
+      border-top: 1px solid var(--line);
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 9px; color: var(--ink-mute);
+      letter-spacing: 0.25em; text-transform: uppercase;
+    }
+    footer a {
+      color: var(--ink-dim); text-decoration: none;
+      letter-spacing: 0.25em;
+      padding: 4px 0;
+      border-bottom: 1px solid transparent;
+      transition: all 0.2s;
+    }
+    footer a:hover { color: var(--up); border-bottom-color: var(--up); }
+    footer .dot-sep { margin: 0 14px; color: var(--ink-mute); }
+
+    @media (max-width: 900px) {
+      header { grid-template-columns: 1fr 1fr; gap: 20px; }
+      .clock, .count, .alarm-control { align-items: flex-start; }
+      main { padding: 20px 18px 32px; }
+      .brand h1 { font-size: 20px; }
+    }
   </style>
 </head>
 <body>
-  <header>
-    <h1>PAS-SCADA Health Monitor</h1>
-    <div class="summary">
-      {now} &nbsp;·&nbsp;
-      <span class="up">{up} UP</span> &nbsp;/&nbsp;
-      <span class="down">{down} DOWN</span> &nbsp;/&nbsp;
-      {total} total
+  <main>
+    <header>
+      <div class="brand">
+        <span class="ident">PAS · SCADA · KAFKA · BRIDGE</span>
+        <h1>Mission Control</h1>
+        <span class="sub">live operational health · 30s probe cycle</span>
+      </div>
+      <div></div>
+      <div class="clock">
+        <span class="time" id="clock-time">--:--:--</span>
+        <span class="date" id="clock-date">----</span>
+      </div>
+      <div class="count" id="counter">
+        <span class="num" id="count-num">--</span>
+        <span class="label" id="count-label">probes</span>
+      </div>
+      <div class="alarm-control">
+        <button class="alarm-btn disarmed" id="alarm-toggle">Enable alarm</button>
+        <span class="alarm-status" id="alarm-status">Click to arm sound</span>
+      </div>
+    </header>
+
+    <div class="banner" id="banner">
+      <span class="pulse"></span>
+      <span class="msg" id="banner-msg">Initialising…</span>
+      <span class="ticker" id="ticker">— sync pending</span>
     </div>
-  </header>
-  <div class="grid">
-{cards}
-  </div>
-  <footer>
-    Auto-refresh every 30s &nbsp;·&nbsp;
-    <a href="/state">JSON state</a> &nbsp;·&nbsp;
-    <a href="/docs">API docs</a> &nbsp;·&nbsp;
-    <a href="/healthz">healthz</a>
-  </footer>
+
+    <div class="grid" id="grid">
+      <div class="loading">Loading probe state</div>
+    </div>
+
+    <footer>
+      <span>PAS-SCADA · Mission Control · 5s refresh</span>
+      <div>
+        <a href="/state">JSON state</a>
+        <span class="dot-sep">/</span>
+        <a href="/docs">API</a>
+        <span class="dot-sep">/</span>
+        <a href="/healthz">healthz</a>
+      </div>
+    </footer>
+  </main>
+
+  <script>
+    // ─── Section grouping ────────────────────────────────────────
+    const SECTIONS = [
+      { id: 'pipeline',   num: '01', title: 'TMS Pipeline',     match: n => /^(artemis-|kafka$|zookeeper$)/.test(n) },
+      { id: 'bridge',     num: '02', title: 'Bridge & Workers', match: n => /^(pas-scada-(bridge|demo|monitor)|kafdrop|kafka-connect)$/.test(n) },
+      { id: 'connectors', num: '03', title: 'Kafka Connect',    match: n => /^connector-/.test(n) },
+      { id: 'scada',      num: '04', title: 'SCADA Side',       match: n => /^(rabbitmq-|scada-api)/.test(n) },
+    ];
+
+    // ─── Audio (Web Audio API — synthesized 3-tone alarm) ────────
+    let audioCtx = null;
+    let alarmInterval = null;
+    let alarmArmed = localStorage.getItem('pas-alarm-armed') === '1';
+
+    const ensureAudio = () => audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+
+    function beep(freq, duration, when = 0) {
+      const ctx = ensureAudio();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const t0 = ctx.currentTime + when;
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(0.22, t0 + 0.02);
+      gain.gain.linearRampToValueAtTime(0, t0 + duration);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + duration);
+    }
+    const playAlarm = () => {
+      if (!alarmArmed) return;
+      beep(880, 0.18, 0.00);
+      beep(740, 0.18, 0.22);
+      beep(600, 0.28, 0.44);
+    };
+    const startAlarm = () => {
+      stopAlarm();
+      playAlarm();
+      alarmInterval = setInterval(playAlarm, 4000);
+    };
+    const stopAlarm = () => {
+      if (alarmInterval) { clearInterval(alarmInterval); alarmInterval = null; }
+    };
+
+    // ─── Alarm toggle ────────────────────────────────────────────
+    const toggleBtn = document.getElementById('alarm-toggle');
+    const toggleStatus = document.getElementById('alarm-status');
+    function renderToggle() {
+      if (alarmArmed) {
+        toggleBtn.textContent = 'Alarm armed';
+        toggleBtn.className = 'alarm-btn armed';
+        toggleStatus.textContent = 'Audio alerts active';
+      } else {
+        toggleBtn.textContent = 'Enable alarm';
+        toggleBtn.className = 'alarm-btn disarmed';
+        toggleStatus.textContent = 'Click to arm sound';
+      }
+    }
+    toggleBtn.addEventListener('click', () => {
+      alarmArmed = !alarmArmed;
+      localStorage.setItem('pas-alarm-armed', alarmArmed ? '1' : '0');
+      renderToggle();
+      if (alarmArmed) {
+        ensureAudio();
+        beep(660, 0.15, 0); // confirmation chirp
+      } else {
+        stopAlarm();
+      }
+    });
+    renderToggle();
+
+    // ─── Clock ───────────────────────────────────────────────────
+    const clockTime = document.getElementById('clock-time');
+    const clockDate = document.getElementById('clock-date');
+    function updateClock() {
+      const now = new Date();
+      clockTime.textContent = now.toTimeString().slice(0, 8);
+      const dStr = now.toLocaleDateString('en-GB',
+        { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+      clockDate.textContent = dStr.toUpperCase().replace(/,/g, ' ·');
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // ─── State + render ──────────────────────────────────────────
+    const grid = document.getElementById('grid');
+    const banner = document.getElementById('banner');
+    const bannerMsg = document.getElementById('banner-msg');
+    const counter = document.getElementById('counter');
+    const countNum = document.getElementById('count-num');
+    const countLabel = document.getElementById('count-label');
+    let lastStates = {};
+    let firstRender = true;
+
+    const escapeHtml = s => String(s).replace(/[&<>"']/g, ch => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[ch]));
+    const fmtTime = v => {
+      if (!v) return '—';
+      const s = String(v);
+      const m = s.match(/T(\d{2}:\d{2}:\d{2})/);
+      return m ? m[1] : s.slice(0, 8);
+    };
+
+    function categorize(state) {
+      const buckets = SECTIONS.map(s => ({ ...s, items: [] }));
+      const orphans = [];
+      Object.keys(state).sort().forEach(name => {
+        const item = { name, ...state[name] };
+        let placed = false;
+        for (const b of buckets) {
+          if (b.match(name)) { b.items.push(item); placed = true; break; }
+        }
+        if (!placed) orphans.push(item);
+      });
+      if (orphans.length) buckets.push({ id: 'other', num: '99', title: 'Other', items: orphans });
+      return buckets;
+    }
+
+    function renderCard(c, justFailed, justRecovered) {
+      const errBlock = c.current_state === 'DOWN' && c.last_error
+        ? `<div class="card-err">${escapeHtml(c.last_error)}</div>`
+        : '';
+      const failAttr = justFailed ? 'data-just-failed' : '';
+      const recAttr  = justRecovered ? 'data-just-recovered' : '';
+      return `
+        <div class="card" data-state="${c.current_state}" data-name="${escapeHtml(c.name)}" ${failAttr} ${recAttr}>
+          <div class="card-head">
+            <span class="dot"></span>
+            <span class="name">${escapeHtml(c.name)}</span>
+            <span class="state">${c.current_state}</span>
+          </div>
+          <div class="card-body">
+            <div class="row"><span class="key">last ok</span><span class="val">${fmtTime(c.last_ok_at)}</span></div>
+            <div class="row"><span class="key">last fail</span><span class="val">${fmtTime(c.last_fail_at)}</span></div>
+            <div class="row"><span class="key">since</span><span class="val">${fmtTime(c.last_state_change)}</span></div>
+            <div class="row"><span class="key">streak</span><span class="val">${c.consecutive_fails || 0}f / ${c.consecutive_passes || 0}p</span></div>
+            ${errBlock}
+          </div>
+        </div>`;
+    }
+
+    function render(state) {
+      const buckets = categorize(state);
+      let html = '';
+      for (const b of buckets) {
+        const total = b.items.length;
+        const downs = b.items.filter(i => i.current_state === 'DOWN').length;
+        const ups   = total - downs;
+        const summary = downs > 0
+          ? `<span class="summary alert">${ups}/${total} OK · ${downs} DOWN</span>`
+          : `<span class="summary">${total} green</span>`;
+        const cards = b.items.map(item => {
+          const prev = lastStates[item.name];
+          const justFailed   = !firstRender && prev && prev !== 'DOWN' && item.current_state === 'DOWN';
+          const justRecovered = !firstRender && prev && prev !== 'UP'   && item.current_state === 'UP';
+          return renderCard(item, justFailed, justRecovered);
+        }).join('');
+        html += `
+          <section class="section">
+            <div class="section-head">
+              <span class="num">${b.num}</span>
+              <h2>${b.title}</h2>
+              ${summary}
+            </div>
+            <div class="cards">${cards}</div>
+          </section>`;
+      }
+      grid.innerHTML = html;
+      firstRender = false;
+    }
+
+    function updateBanner(state) {
+      const items = Object.values(state);
+      const total = items.length;
+      const downItems = items.filter(i => i.current_state === 'DOWN');
+      const ups = total - downItems.length;
+
+      countNum.textContent = downItems.length === 0 ? ups : downItems.length;
+      countLabel.textContent = downItems.length === 0 ? 'all green' : 'critical';
+
+      if (downItems.length === 0) {
+        banner.classList.remove('alert');
+        counter.classList.remove('has-down');
+        bannerMsg.textContent = 'All systems nominal';
+        document.title = 'PAS-SCADA · all green';
+      } else {
+        banner.classList.add('alert');
+        counter.classList.add('has-down');
+        const names = downItems.map(d => d.name).join(' · ');
+        bannerMsg.textContent = `${downItems.length} system${downItems.length === 1 ? '' : 's'} down — ${names}`;
+        document.title = `🔴 (${downItems.length}) PAS-SCADA — ${downItems.map(d => d.name).join(', ')}`;
+      }
+    }
+
+    function detectAndAlert(state) {
+      let newDownAppeared = false;
+      const downSet = new Set();
+      for (const name of Object.keys(state)) {
+        const cur = state[name].current_state;
+        const prev = lastStates[name];
+        if (prev && prev !== 'DOWN' && cur === 'DOWN') newDownAppeared = true;
+        if (cur === 'DOWN') downSet.add(name);
+        lastStates[name] = cur;
+      }
+      if (downSet.size === 0) {
+        stopAlarm();
+      } else if (newDownAppeared) {
+        startAlarm();
+      }
+    }
+
+    // ─── Poll loop ───────────────────────────────────────────────
+    let lastSync = Date.now();
+    const ticker = document.getElementById('ticker');
+
+    async function poll() {
+      try {
+        const r = await fetch('/state', { cache: 'no-store' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const state = await r.json();
+        detectAndAlert(state);
+        render(state);
+        updateBanner(state);
+        lastSync = Date.now();
+        ticker.textContent = '— synced just now';
+      } catch (e) {
+        ticker.textContent = '— sync failed: ' + e.message;
+      }
+    }
+    function refreshTicker() {
+      const t = Math.floor((Date.now() - lastSync) / 1000);
+      if (t >= 2) ticker.textContent = `— synced ${t}s ago`;
+    }
+    setInterval(refreshTicker, 1000);
+    poll();
+    setInterval(poll, 5000);
+  </script>
 </body>
 </html>
 """
 
-CARD_TEMPLATE = """    <div class="card {cls}">
-      <div class="card-head">
-        <span class="name">{name}</span>
-        <span class="status {cls}">{state}</span>
-      </div>
-      <div class="meta"><span class="label">last OK</span>{last_ok}</div>
-      <div class="meta"><span class="label">last fail</span>{last_fail}</div>
-      <div class="meta"><span class="label">since</span>{state_change}</div>
-      <div class="meta"><span class="label">fails</span>{fails} consecutive</div>
-{err_block}
-    </div>"""
-
-
-def _fmt_field(v):
-    return html.escape(str(v)) if v else "—"
-
 
 @app.get("/", response_class=HTMLResponse, summary="Visual dashboard")
 def dashboard():
-    """Single-page HTML dashboard — color-coded boxes per check, auto-refresh."""
-    snap = app.state.shared_state.snapshot()
-    cards = []
-    up = down = 0
-    for name in sorted(snap.keys()):
-        s = snap[name]
-        state = s.get("current_state", "UNKNOWN")
-        cls = state.lower() if state in ("UP", "DOWN") else "unknown"
-        if state == "UP":
-            up += 1
-        elif state == "DOWN":
-            down += 1
-        err = s.get("last_error") or ""
-        err_block = (f'      <div class="err">{html.escape(err)}</div>'
-                     if err and state == "DOWN" else "")
-        cards.append(CARD_TEMPLATE.format(
-            cls=cls,
-            name=html.escape(name),
-            state=state,
-            last_ok=_fmt_field(s.get("last_ok_at")),
-            last_fail=_fmt_field(s.get("last_fail_at")),
-            state_change=_fmt_field(s.get("last_state_change")),
-            fails=s.get("consecutive_fails", 0),
-            err_block=err_block,
-        ))
-
-    if not cards:
-        body = '    <div class="empty">No probes have completed yet — refresh in a few seconds.</div>'
-    else:
-        body = "\n".join(cards)
-
-    return HTMLResponse(DASHBOARD_TEMPLATE.format(
-        now=now_iso(),
-        up=up,
-        down=down,
-        total=len(snap),
-        cards=body,
-    ))
+    """Mission-control style live dashboard. JS polls /state every 5s,
+    categorizes probes into 4 sections, plays an audible alarm on
+    state-change UP→DOWN once the user clicks the Enable Alarm button."""
+    return HTMLResponse(DASHBOARD_HTML)
 
 
 # ─── Entrypoint ───────────────────────────────────────────────────
