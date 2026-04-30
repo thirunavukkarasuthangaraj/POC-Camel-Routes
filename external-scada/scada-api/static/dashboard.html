@@ -542,6 +542,8 @@ pre, code, .json {
         <div class="timer-en"><input type="checkbox" id="cfg-ga-en"> on</div>
       </div>
       <button class="btn btn-a" onclick="saveTimers()" style="align-self:center;">Apply</button>
+      <button class="btn btn-a" onclick="scadaPubStart()" id="scada-pub-start-btn" style="align-self:center;">Start all</button>
+      <button class="btn btn-err" onclick="scadaPubStop()" id="scada-pub-stop-btn" style="align-self:center;display:none;">Stop all</button>
     </div>
   </div>
 
@@ -813,6 +815,59 @@ async function publishManual(){
   const id=$('m-alarm-id').value, state=$('m-alarm-state').value;
   await fetch('/api/publish',{method:'POST',headers:ct(),body:JSON.stringify({id,state})});
 }
+
+// ── SCADA → TMS auto-senders master Start / Stop ──
+async function scadaPubStart(){
+  // Apply current interval values + flip everything ON
+  await fetch('/api/config',{method:'POST',headers:ct(),body:JSON.stringify({
+    auto_alarm_seconds:        parseInt($('cfg-aa').value || '10', 10),
+    keepalive_seconds:         parseInt($('cfg-ka').value || '30', 10),
+    send_all_alarms_seconds:   parseInt($('cfg-sa').value || '60', 10),
+    get_all_alarms_seconds:    parseInt($('cfg-ga').value || '120', 10),
+    auto_alarm_enabled:        true,
+    keepalive_paused:          false,
+    send_all_alarms_enabled:   true,
+    get_all_alarms_enabled:    true,
+  })});
+  // Reflect immediately in UI
+  $('cfg-aa-en').checked = true;
+  $('cfg-sa-en').checked = true;
+  $('cfg-ga-en').checked = true;
+  $('cfg-ka-paused').checked = false;
+  scadaPubRefresh();
+}
+async function scadaPubStop(){
+  await fetch('/api/config',{method:'POST',headers:ct(),body:JSON.stringify({
+    auto_alarm_enabled:      false,
+    keepalive_paused:        true,
+    send_all_alarms_enabled: false,
+    get_all_alarms_enabled:  false,
+  })});
+  $('cfg-aa-en').checked = false;
+  $('cfg-sa-en').checked = false;
+  $('cfg-ga-en').checked = false;
+  $('cfg-ka-paused').checked = true;
+  scadaPubRefresh();
+}
+function scadaPubRefresh(){
+  const aa = $('cfg-aa-en').checked, sa = $('cfg-sa-en').checked,
+        ga = $('cfg-ga-en').checked, kp = !$('cfg-ka-paused').checked;
+  const anyOn = aa || sa || ga || kp;
+  if (anyOn) {
+    $('scada-pub-start-btn').style.display = 'none';
+    $('scada-pub-stop-btn').style.display = '';
+  } else {
+    $('scada-pub-start-btn').style.display = '';
+    $('scada-pub-stop-btn').style.display = 'none';
+  }
+}
+// Keep button visibility in sync when user toggles individual checkboxes
+['cfg-aa-en','cfg-sa-en','cfg-ga-en','cfg-ka-paused'].forEach(id => {
+  document.addEventListener('DOMContentLoaded', () => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', scadaPubRefresh);
+  });
+});
 
 // ── TMS → SCADA publisher (forward path) ──
 async function tmsPubStart(){
