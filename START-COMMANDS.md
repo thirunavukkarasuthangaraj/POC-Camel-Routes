@@ -4,15 +4,29 @@ Each section is self-contained. Run from the repo root unless noted.
 Use this when you want to bring up / restart just one piece without
 running the whole `start.sh`.
 
-## 0 · Prerequisites (run once)
+> **First time on a new PC?** Read [SETUP.md](./SETUP.md) first — it covers
+> installing Docker / minikube / kubectl / git and cloning both repos.
+> Once the prerequisites are in place, come back here.
+
+## 0 · Prerequisites (run once per shell session)
 
 ```bash
+# Set the path to your local messaging-infra repo. EVERY section below
+# uses $MESSAGING_INFRA — adjust this once and everything just works.
+export MESSAGING_INFRA="$HOME/code/messaging-infra"     # Mac / Linux / WSL
+# Windows Git Bash:  export MESSAGING_INFRA="/c/Users/you/code/messaging-infra"
+# Windows native:    set MESSAGING_INFRA=C:\Users\you\code\messaging-infra
+
 # minikube must be running before anything else can deploy
 minikube start --cpus=4 --memory=6144 --driver=docker
 
 # Verify
 kubectl get nodes
 ```
+
+> Replace `pinkline/...`, `ghcr.io/thirunavukkarasuthangaraj/...` image
+> names with your own registry/tag if you push to a private registry.
+> All commands below assume the local-build flow used by `start.sh`.
 
 ---
 
@@ -22,7 +36,7 @@ The TMS side runs Artemis on the host (Docker), the rest in k8s `pinkline` names
 
 ```bash
 # 1.1 — Artemis (Docker on host)
-docker compose -f /d/pinkline/code/messaging-infra/docker-compose.yml up -d
+docker compose -f $MESSAGING_INFRA/docker-compose.yml up -d
 # Verify:  docker ps --filter name=artemis
 #          → Artemis console: http://localhost:8161  (admin/admin)
 
@@ -274,7 +288,7 @@ kubectl delete ns pinkline
 kubectl delete ns scada
 
 # Stop Artemis (Docker)
-docker compose -f /d/pinkline/code/messaging-infra/docker-compose.yml down
+docker compose -f $MESSAGING_INFRA/docker-compose.yml down
 
 # Stop minikube — preserve state
 minikube stop
