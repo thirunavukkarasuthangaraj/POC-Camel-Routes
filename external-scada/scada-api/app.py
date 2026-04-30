@@ -518,38 +518,91 @@ TMS_TOPICS = [
 ]
 
 def _tms_xml(topic: str) -> str:
-    """Generate a minimal valid-looking XML payload for the given topic.
-    The bridge's XmlToJsonProcessor accepts arbitrary XML, so any well-
-    formed root element works for the demo."""
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-    train_id = f"scada-test-{int(time.time())}"
-    trip_no = random.randint(100, 999)
+    """Generate REALISTIC XML matching the actual TMS schema each topic
+    uses, so the bridge's XmlToJsonProcessor produces meaningful JSON
+    that matches the production wire format.
+
+    Schemas come from the Java POJOs in
+    tms/src/main/java/com/pinkline/kafkabridge/model/."""
+    now = datetime.now(timezone.utc)
+    ts_compact   = now.strftime("%Y%m%dT%H%M%S")             # 20260430T143012
+    ts_iso       = now.strftime("%Y-%m-%dT%H:%M:%S.000Z")    # ISO8601
+    seconds_today = now.hour * 3600 + now.minute * 60 + now.second
+    train_id  = f"T{random.randint(1000, 9999)}"
+    tt_guid   = f"{random.randint(100000, 999999)}-{random.randint(1000, 9999)}-{random.randint(100, 999)}"
+    trip_no   = random.randint(100, 999)
+    line_id   = random.randint(101, 109)
+    platform  = random.randint(2200, 2299)
+    arrival   = (seconds_today + 60) % 86400
+    departure = arrival + 60
+
+    # ── TMS.PISInfo: Passenger Info time table (ATRTimeTableMsg.V3) ──
     if topic == "TMS.PISInfo":
         return (
             f'<ATRTimeTable>'
-            f'<dateTime>{ts}</dateTime>'
-            f'<StartIndex>0</StartIndex><TotalCount>1</TotalCount><GraphID>42</GraphID>'
-            f'<Trains><Tg><TTGUID>{train_id}</TTGUID><TripNo>{trip_no}</TripNo>'
-            f'<CTD lpid="101" tn="{trip_no}"/>'
-            f'<Evts F="3" Id="2201" As="3600" Ds="3660"/>'
-            f'</Tg></Trains></ATRTimeTable>')
+            f'<dateTime>{ts_compact}</dateTime>'
+            f'<Trains>'
+            f'<Tg>'
+            f'<Id>{trip_no}</Id>'
+            f'<TTGUID>{tt_guid}</TTGUID>'
+            f'<TripNo>{trip_no}</TripNo>'
+            f'<CTD lpid="{line_id}" tn="{trip_no}"/>'
+            f'<TmsPTI trguid="{tt_guid}" typeid="1" ttypeid="2"/>'
+            f'<Evts F="3" Id="{platform}" As="{arrival}" Ds="{departure}"/>'
+            f'<Evts F="3" Id="{platform + 1}" As="{arrival + 120}" Ds="{departure + 120}"/>'
+            f'</Tg>'
+            f'</Trains>'
+            f'</ATRTimeTable>')
+
+    # ── RCS.E2K.TMS.TrafficReportClient: alternates Arrival / Departure ──
     if topic == "RCS.E2K.TMS.TrafficReportClient":
+        if random.random() < 0.5:
+            return (
+                f'<SingleArrival>'
+                f'<Arr>'
+                f'<train>'
+                f'<TTGUID>{tt_guid}</TTGUID>'
+                f'<id>{train_id}</id>'
+                f'</train>'
+                f'<loc><tmsid>{platform}</tmsid></loc>'
+                f'<atimes><oTime>{ts_iso}</oTime></atimes>'
+                f'</Arr>'
+                f'</SingleArrival>')
         return (
-            f'<TrafficReport>'
-            f'<dateTime>{ts}</dateTime>'
-            f'<SingleArrival trainId="{train_id}" platform="PL{trip_no}"/>'
-            f'</TrafficReport>')
+            f'<SingleDeparture>'
+            f'<Dep>'
+            f'<train>'
+            f'<TTGUID>{tt_guid}</TTGUID>'
+            f'<id>{train_id}</id>'
+            f'</train>'
+            f'<loc><tmsid>{platform}</tmsid></loc>'
+            f'<dtimes><oTime>{ts_iso}</oTime></dtimes>'
+            f'</Dep>'
+            f'</SingleDeparture>')
+
+    # ── TSInfo: track section / signalling status (no Java POJO yet —
+    #          treated as generic XML and converted via Jackson XmlMapper) ──
     if topic == "TSInfo":
+        section_id = f"TS_{platform}_{random.randint(1, 9)}"
+        state = random.choice(["OCCUPIED", "CLEAR", "FAULT", "RESERVED"])
         return (
             f'<TSInfo>'
-            f'<dateTime>{ts}</dateTime>'
-            f'<Section id="S{trip_no}" state="OCCUPIED"/>'
+            f'<dateTime>{ts_compact}</dateTime>'
+            f'<Section id="{section_id}" state="{state}" '
+            f'lineId="{line_id}" trainId="{train_id}"/>'
             f'</TSInfo>')
+
+    # ── RCS.E2K.TMS.RouteInfo: route destinations for a train ──
     return (
-        f'<RouteInfo>'
-        f'<dateTime>{ts}</dateTime>'
-        f'<Route id="R{trip_no}" from="ST{trip_no % 10}" to="ST{(trip_no + 1) % 10}"/>'
-        f'</RouteInfo>')
+        f'<routeinfo>'
+        f'<TTGUID>{tt_guid}</TTGUID>'
+        f'<trainid>{train_id}</trainid>'
+        f'<dests>'
+        f'<dest tmsid="{platform}"/>'
+        f'<dest tmsid="{platform + 1}"/>'
+        f'<dest tmsid="{platform + 2}"/>'
+        f'</dests>'
+        f'</routeinfo>')
 
 
 def _tms_publish(topic: str, xml: str) -> None:
