@@ -561,35 +561,29 @@ pre, code, .json {
       <button class="btn btn-p" onclick="sendAll()">SendAll</button>
       <button class="btn btn-b" onclick="sendGetAll()">GetAll</button>
     </div>
-  </div>
 
-
-</div>
-
-<!-- ── TMS Publisher (own row so it's prominent and never wraps off-screen) ── -->
-<div class="cfg-bar" style="border-top:1px solid var(--border);">
-  <div class="cfg-group" style="flex:1;">
-    <div class="cfg-group-title">↓ TMS → SCADA Publisher (inject test XML into Artemis)</div>
-    <div class="cfg-row">
-      <span class="cfg-lbl">Topic</span>
-      <select id="tms-pub-topic" style="width:240px;">
+    <!-- TMS → SCADA publisher (forward path test injector) -->
+    <div class="cfg-row" style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);">
+      <span class="cfg-lbl" style="font-weight:700;color:#f59e0b;">TMS →</span>
+      <select id="tms-pub-topic" style="width:220px;">
         <option value="TMS.PISInfo">TMS.PISInfo</option>
         <option value="RCS.E2K.TMS.TrafficReportClient">RCS.E2K.TMS.TrafficReportClient</option>
         <option value="TSInfo">TSInfo</option>
         <option value="RCS.E2K.TMS.RouteInfo">RCS.E2K.TMS.RouteInfo</option>
       </select>
-      <span class="cfg-lbl" style="margin-left:12px;">Every</span>
-      <input type="number" id="tms-pub-interval" min="1" max="3600" value="5" style="width:60px;">
+      <span class="cfg-lbl">every</span>
+      <input type="number" id="tms-pub-interval" min="1" max="3600" value="5" style="width:50px;">
       <span class="cfg-lbl">s</span>
-      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;margin-left:8px;">
-        <input type="checkbox" id="tms-pub-enabled"> auto
-      </label>
-      <button class="btn btn-a" onclick="tmsPubApply()" style="margin-left:8px;">Apply</button>
-      <button class="btn btn-g" onclick="tmsPubNow()">Send now</button>
-      <span id="tms-pub-status" style="margin-left:auto;font-size:11px;color:var(--muted);font-family:var(--mono);"></span>
+      <button class="btn btn-a" onclick="tmsPubStart()" id="tms-pub-start-btn">Start</button>
+      <button class="btn btn-err" onclick="tmsPubStop()" id="tms-pub-stop-btn" style="display:none;">Stop</button>
+      <button class="btn btn-w" onclick="tmsPubNow()" style="background:#f59e0b;color:#1a1a1a;">Send once</button>
+      <span id="tms-pub-status" style="font-size:10px;color:var(--muted);font-family:var(--mono);"></span>
     </div>
   </div>
+
+
 </div>
+
 
 <!-- ── TWO BOXES ── -->
 <div class="two-box">
@@ -820,13 +814,17 @@ async function publishManual(){
   await fetch('/api/publish',{method:'POST',headers:ct(),body:JSON.stringify({id,state})});
 }
 
-// ── TMS Publisher (forward path) ──
-async function tmsPubApply(){
-  const enabled    = $('tms-pub-enabled').checked;
+// ── TMS → SCADA publisher (forward path) ──
+async function tmsPubStart(){
   const interval_s = parseInt($('tms-pub-interval').value || '5', 10);
   const topic      = $('tms-pub-topic').value;
   await fetch('/api/tms-publish/config',
-    {method:'POST',headers:ct(),body:JSON.stringify({enabled,interval_s,topic})});
+    {method:'POST',headers:ct(),body:JSON.stringify({enabled:true,interval_s,topic})});
+  tmsPubRefresh();
+}
+async function tmsPubStop(){
+  await fetch('/api/tms-publish/config',
+    {method:'POST',headers:ct(),body:JSON.stringify({enabled:false})});
   tmsPubRefresh();
 }
 async function tmsPubNow(){
@@ -849,11 +847,18 @@ async function tmsPubRefresh(){
     if (typeof s.interval_s === 'number' && document.activeElement !== $('tms-pub-interval')) {
       $('tms-pub-interval').value = s.interval_s;
     }
-    if (typeof s.enabled === 'boolean') $('tms-pub-enabled').checked = s.enabled;
+    // Toggle Start/Stop button visibility based on state
+    if (s.enabled) {
+      $('tms-pub-start-btn').style.display = 'none';
+      $('tms-pub-stop-btn').style.display = '';
+    } else {
+      $('tms-pub-start-btn').style.display = '';
+      $('tms-pub-stop-btn').style.display = 'none';
+    }
     const last = s.last_at ? `last ${s.last_at.slice(11,19)}` : 'never';
     const status = s.enabled
-      ? `auto · sent ${s.sent} · ${last}`
-      : `idle · sent ${s.sent} · ${last}`;
+      ? `▶ running · sent ${s.sent} · ${last}`
+      : `■ stopped · sent ${s.sent} · ${last}`;
     const errPart = s.last_error ? ` · err ${s.errors}` : '';
     $('tms-pub-status').textContent = status + errPart;
   } catch (e) {
