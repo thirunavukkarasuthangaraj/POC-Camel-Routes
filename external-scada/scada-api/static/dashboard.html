@@ -563,31 +563,32 @@ pre, code, .json {
     </div>
   </div>
 
-  <div style="width:1px;background:var(--border);align-self:stretch;"></div>
 
-  <!-- TMS Publisher (forward direction: inject XML into Artemis via the bridge) -->
-  <div class="cfg-group">
-    <div class="cfg-group-title">TMS → SCADA Publisher (forward path)</div>
+</div>
+
+<!-- ── TMS Publisher (own row so it's prominent and never wraps off-screen) ── -->
+<div class="cfg-bar" style="border-top:1px solid var(--border);">
+  <div class="cfg-group" style="flex:1;">
+    <div class="cfg-group-title">↓ TMS → SCADA Publisher (inject test XML into Artemis)</div>
     <div class="cfg-row">
       <span class="cfg-lbl">Topic</span>
-      <select id="tms-pub-topic" style="width:200px;">
+      <select id="tms-pub-topic" style="width:240px;">
         <option value="TMS.PISInfo">TMS.PISInfo</option>
         <option value="RCS.E2K.TMS.TrafficReportClient">RCS.E2K.TMS.TrafficReportClient</option>
         <option value="TSInfo">TSInfo</option>
         <option value="RCS.E2K.TMS.RouteInfo">RCS.E2K.TMS.RouteInfo</option>
       </select>
-      <span class="cfg-lbl">Every</span>
+      <span class="cfg-lbl" style="margin-left:12px;">Every</span>
       <input type="number" id="tms-pub-interval" min="1" max="3600" value="5" style="width:60px;">
       <span class="cfg-lbl">s</span>
-      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;">
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;margin-left:8px;">
         <input type="checkbox" id="tms-pub-enabled"> auto
       </label>
-      <button class="btn btn-a" onclick="tmsPubApply()">Apply</button>
+      <button class="btn btn-a" onclick="tmsPubApply()" style="margin-left:8px;">Apply</button>
       <button class="btn btn-g" onclick="tmsPubNow()">Send now</button>
-      <span id="tms-pub-status" style="font-size:11px;color:var(--muted);font-family:var(--mono);"></span>
+      <span id="tms-pub-status" style="margin-left:auto;font-size:11px;color:var(--muted);font-family:var(--mono);"></span>
     </div>
   </div>
-
 </div>
 
 <!-- ── TWO BOXES ── -->

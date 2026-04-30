@@ -468,7 +468,15 @@ def mqtt_loop():
 # ── HTTP API ──────────────────────────────────────────────────────────
 @app.route("/")
 def index():
-    return send_from_directory("static", "dashboard.html")
+    # Disable HTTP caching for the dashboard shell so iterative UI
+    # changes during a demo always render on next reload — Flask's
+    # default static cache headers are aggressive (12-hour max-age)
+    # which masks redeploys until the user opens DevTools.
+    resp = send_from_directory("static", "dashboard.html")
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 @app.route("/api/status")
