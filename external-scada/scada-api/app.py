@@ -51,6 +51,7 @@ from datetime import datetime, timezone
 from queue import Queue, Empty
 
 import paho.mqtt.client as mqtt
+import requests
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from flask import Flask, Response, jsonify, request, send_from_directory
 
@@ -485,6 +486,126 @@ def api_status():
         "stats":      stats,
         "alarmCount": len(alarm_db),
     })
+
+
+# ── TMS Publisher (for demo: synthesize TMS-side messages and POST them
+# to the bridge's REST publish endpoint, which writes to Artemis) ──────
+BRIDGE_URL = os.getenv("BRIDGE_URL",
+            "http://pas-scada-bridge.pinkline.svc.cluster.local:8085").rstrip("/")
+
+tms_pub = {
+    "enabled":    False,
+    "interval_s": 5,
+    "topic":      "TMS.PISInfo",
+    "sent":       0,
+    "errors":     0,
+    "last_at":    None,
+    "last_error": None,
+}
+TMS_TOPICS = [
+    "TMS.PISInfo",
+    "RCS.E2K.TMS.TrafficReportClient",
+    "TSInfo",
+    "RCS.E2K.TMS.RouteInfo",
+]
+
+def _tms_xml(topic: str) -> str:
+    """Generate a minimal valid-looking XML payload for the given topic.
+    The bridge's XmlToJsonProcessor accepts arbitrary XML, so any well-
+    formed root element works for the demo."""
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    train_id = f"scada-test-{int(time.time())}"
+    trip_no = random.randint(100, 999)
+    if topic == "TMS.PISInfo":
+        return (
+            f'<ATRTimeTable>'
+            f'<dateTime>{ts}</dateTime>'
+            f'<StartIndex>0</StartIndex><TotalCount>1</TotalCount><GraphID>42</GraphID>'
+            f'<Trains><Tg><TTGUID>{train_id}</TTGUID><TripNo>{trip_no}</TripNo>'
+            f'<CTD lpid="101" tn="{trip_no}"/>'
+            f'<Evts F="3" Id="2201" As="3600" Ds="3660"/>'
+            f'</Tg></Trains></ATRTimeTable>')
+    if topic == "RCS.E2K.TMS.TrafficReportClient":
+        return (
+            f'<TrafficReport>'
+            f'<dateTime>{ts}</dateTime>'
+            f'<SingleArrival trainId="{train_id}" platform="PL{trip_no}"/>'
+            f'</TrafficReport>')
+    if topic == "TSInfo":
+        return (
+            f'<TSInfo>'
+            f'<dateTime>{ts}</dateTime>'
+            f'<Section id="S{trip_no}" state="OCCUPIED"/>'
+            f'</TSInfo>')
+    return (
+        f'<RouteInfo>'
+        f'<dateTime>{ts}</dateTime>'
+        f'<Route id="R{trip_no}" from="ST{trip_no % 10}" to="ST{(trip_no + 1) % 10}"/>'
+        f'</RouteInfo>')
+
+
+def _tms_publish(topic: str, xml: str) -> None:
+    url = f"{BRIDGE_URL}/api/tms-publish/{topic}"
+    r = requests.post(url, data=xml.encode("utf-8"),
+                      headers={"Content-Type": "application/xml"},
+                      timeout=5)
+    r.raise_for_status()
+    tms_pub["sent"] += 1
+    tms_pub["last_at"] = now_iso()
+    tms_pub["last_error"] = None
+
+
+def _tms_publish_loop():
+    while True:
+        if tms_pub["enabled"]:
+            try:
+                _tms_publish(tms_pub["topic"], _tms_xml(tms_pub["topic"]))
+            except Exception as e:
+                tms_pub["errors"] += 1
+                tms_pub["last_error"] = f"{type(e).__name__}: {e}"
+            time.sleep(max(1, int(tms_pub["interval_s"])))
+        else:
+            time.sleep(0.5)
+
+
+threading.Thread(target=_tms_publish_loop, daemon=True, name="tms-publisher").start()
+
+
+@app.route("/api/tms-publish", methods=["POST"])
+def api_tms_publish_now():
+    """Manual one-shot publish. Body: {"topic": "...", "xml": "..."}.
+    Both fields optional — defaults to current toggle topic + synthesized XML."""
+    body = request.get_json(silent=True) or {}
+    topic = body.get("topic") or tms_pub["topic"]
+    xml = body.get("xml") or _tms_xml(topic)
+    if topic not in TMS_TOPICS:
+        return jsonify({"ok": False, "error": "unknown topic", "allowed": TMS_TOPICS}), 400
+    try:
+        _tms_publish(topic, xml)
+        return jsonify({"ok": True, "topic": topic, "sent": tms_pub["sent"]})
+    except Exception as e:
+        tms_pub["errors"] += 1
+        tms_pub["last_error"] = f"{type(e).__name__}: {e}"
+        return jsonify({"ok": False, "error": str(e)}), 502
+
+
+@app.route("/api/tms-publish/config", methods=["POST"])
+def api_tms_publish_config():
+    """Update auto-publisher config. Body keys: enabled, interval_s, topic."""
+    body = request.get_json(silent=True) or {}
+    if "enabled" in body:
+        tms_pub["enabled"] = bool(body["enabled"])
+    if "interval_s" in body:
+        try: tms_pub["interval_s"] = max(1, int(body["interval_s"]))
+        except Exception: pass
+    if "topic" in body and body["topic"] in TMS_TOPICS:
+        tms_pub["topic"] = body["topic"]
+    return jsonify(tms_pub)
+
+
+@app.route("/api/tms-publish/state")
+def api_tms_publish_state():
+    return jsonify({**tms_pub, "topics": TMS_TOPICS, "bridge_url": BRIDGE_URL})
 
 
 @app.route("/api/received")

@@ -563,6 +563,31 @@ pre, code, .json {
     </div>
   </div>
 
+  <div style="width:1px;background:var(--border);align-self:stretch;"></div>
+
+  <!-- TMS Publisher (forward direction: inject XML into Artemis via the bridge) -->
+  <div class="cfg-group">
+    <div class="cfg-group-title">TMS → SCADA Publisher (forward path)</div>
+    <div class="cfg-row">
+      <span class="cfg-lbl">Topic</span>
+      <select id="tms-pub-topic" style="width:200px;">
+        <option value="TMS.PISInfo">TMS.PISInfo</option>
+        <option value="RCS.E2K.TMS.TrafficReportClient">RCS.E2K.TMS.TrafficReportClient</option>
+        <option value="TSInfo">TSInfo</option>
+        <option value="RCS.E2K.TMS.RouteInfo">RCS.E2K.TMS.RouteInfo</option>
+      </select>
+      <span class="cfg-lbl">Every</span>
+      <input type="number" id="tms-pub-interval" min="1" max="3600" value="5" style="width:60px;">
+      <span class="cfg-lbl">s</span>
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;">
+        <input type="checkbox" id="tms-pub-enabled"> auto
+      </label>
+      <button class="btn btn-a" onclick="tmsPubApply()">Apply</button>
+      <button class="btn btn-g" onclick="tmsPubNow()">Send now</button>
+      <span id="tms-pub-status" style="font-size:11px;color:var(--muted);font-family:var(--mono);"></span>
+    </div>
+  </div>
+
 </div>
 
 <!-- ── TWO BOXES ── -->
@@ -793,6 +818,49 @@ async function publishManual(){
   const id=$('m-alarm-id').value, state=$('m-alarm-state').value;
   await fetch('/api/publish',{method:'POST',headers:ct(),body:JSON.stringify({id,state})});
 }
+
+// ── TMS Publisher (forward path) ──
+async function tmsPubApply(){
+  const enabled    = $('tms-pub-enabled').checked;
+  const interval_s = parseInt($('tms-pub-interval').value || '5', 10);
+  const topic      = $('tms-pub-topic').value;
+  await fetch('/api/tms-publish/config',
+    {method:'POST',headers:ct(),body:JSON.stringify({enabled,interval_s,topic})});
+  tmsPubRefresh();
+}
+async function tmsPubNow(){
+  const topic = $('tms-pub-topic').value;
+  const r = await fetch('/api/tms-publish',
+    {method:'POST',headers:ct(),body:JSON.stringify({topic})});
+  const j = await r.json().catch(() => ({}));
+  $('tms-pub-status').textContent = j.ok
+    ? `sent ${j.sent ?? '?'} → ${topic}`
+    : `error: ${j.error || 'unknown'}`;
+  tmsPubRefresh();
+}
+async function tmsPubRefresh(){
+  try {
+    const r = await fetch('/api/tms-publish/state', {cache:'no-store'});
+    const s = await r.json();
+    if (s.topic && document.activeElement !== $('tms-pub-topic')) {
+      $('tms-pub-topic').value = s.topic;
+    }
+    if (typeof s.interval_s === 'number' && document.activeElement !== $('tms-pub-interval')) {
+      $('tms-pub-interval').value = s.interval_s;
+    }
+    if (typeof s.enabled === 'boolean') $('tms-pub-enabled').checked = s.enabled;
+    const last = s.last_at ? `last ${s.last_at.slice(11,19)}` : 'never';
+    const status = s.enabled
+      ? `auto · sent ${s.sent} · ${last}`
+      : `idle · sent ${s.sent} · ${last}`;
+    const errPart = s.last_error ? ` · err ${s.errors}` : '';
+    $('tms-pub-status').textContent = status + errPart;
+  } catch (e) {
+    $('tms-pub-status').textContent = 'state fetch failed';
+  }
+}
+setInterval(tmsPubRefresh, 3000);
+tmsPubRefresh();
 function flash(){
   document.body.style.transition='background .1s';
   document.body.style.background='#0f2040';
