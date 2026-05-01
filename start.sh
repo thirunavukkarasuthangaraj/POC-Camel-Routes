@@ -20,6 +20,19 @@ ok()   { printf '\033[1;32m  ✓ %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;33m  ! %s\033[0m\n' "$*"; }
 die()  { printf '\033[1;31m  ✗ %s\033[0m\n' "$*" >&2; exit 1; }
 
+# ── 0. Kill rogue host containers that bind ports we'll port-forward ────
+# A previous standalone `docker run` of scada-api / monitor / etc. can keep
+# binding 0.0.0.0:8091 etc. after we move to k8s. Chrome then hits the old
+# container instead of `kubectl port-forward` (which binds 127.0.0.1 only).
+# Symptom: dashboards show old UI no matter how many times you rebuild.
+log "Removing any host-side scada-api/monitor/demo containers"
+for name in pas-scada-api pas-scada-monitor pas-scada-demo external-scada-scada-api; do
+  if docker ps -a --format '{{.Names}}' | grep -qx "$name"; then
+    docker rm -f "$name" >/dev/null 2>&1 || true
+    ok "removed rogue container: $name"
+  fi
+done
+
 # ── 1. minikube ─────────────────────────────────────────────────────────
 log "Checking minikube"
 if minikube status 2>/dev/null | grep -q "host: Running"; then
