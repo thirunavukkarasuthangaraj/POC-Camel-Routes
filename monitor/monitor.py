@@ -902,8 +902,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
   <script>
     const SECTIONS = [
       { id: 'pipeline',   title: 'TMS Pipeline',     match: n => /^(artemis-|kafka$|zookeeper$)/.test(n) },
-      { id: 'bridge',     title: 'Bridge & Workers', match: n => /^(pas-scada-(bridge|demo|monitor)|kafdrop|kafka-connect)$/.test(n) },
-      { id: 'connectors', title: 'Kafka Connect',    match: n => /^connector-/.test(n) },
+      { id: 'bridge',     title: 'Bridge & Workers', match: n => /^(pas-scada-(bridge|demo|monitor)|kafdrop)$/.test(n) },
       { id: 'scada',      title: 'SCADA',            match: n => /^(rabbitmq-|scada-api)/.test(n) },
     ];
 

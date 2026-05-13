@@ -87,15 +87,8 @@ public class KafkaBridgeRoutes extends RouteBuilder {
             .handled(true);
 
         // ══════════════════════════════════════════════════════════════════
-        // OUTBOUND: Artemis → pipeline sinks (one route per Artemis topic)
-        //
-        // Skipped when bridge.input-kafka.enabled=true — in that mode a
-        // Kafka Connect source connector populates the input topic and a
-        // single Kafka consumer route below replaces this loop.
-        //
-        // The pipeline is built dynamically from bridge.pipeline config.
-        // Each step in the pipeline adds a .to() call to the route.
-        // Order in config = order of delivery.
+        // OUTBOUND: Artemis → pipeline sinks (one route per Artemis topic).
+        // Pipeline (kafka/rabbitmq/mqtt) is built from bridge.pipeline config.
         // ══════════════════════════════════════════════════════════════════
         if (config.getInputKafka().isEnabled()) {
             log.info("bridge.input-kafka.enabled=true — Artemis-direct routes SKIPPED, "
@@ -168,14 +161,9 @@ public class KafkaBridgeRoutes extends RouteBuilder {
         } // end else (Artemis-direct mode)
 
         // ══════════════════════════════════════════════════════════════════
-        // CONNECT-MODE INPUT: Kafka source → pipeline sinks
-        //
-        // Activated by bridge.input-kafka.enabled=true. Replaces the
-        // Artemis-direct loop above so a Kafka Connect source connector
-        // can sit between the TMS Artemis broker and this app.
-        //
-        // The XmlToJson + Encrypt processors are reused unchanged, so
-        // the wire format on the output side stays identical.
+        // KAFKA-SOURCED INPUT: Kafka topic → pipeline sinks.
+        // Activated by bridge.input-kafka.enabled=true to consume a Kafka
+        // topic instead of Artemis. Reuses XmlToJson + Encrypt unchanged.
         // ══════════════════════════════════════════════════════════════════
         if (config.getInputKafka().isEnabled()) {
             BridgeConfig.InputKafka in = config.getInputKafka();
@@ -244,13 +232,9 @@ public class KafkaBridgeRoutes extends RouteBuilder {
         }
 
         // ══════════════════════════════════════════════════════════════════
-        // REVERSE KAFKA: Kafka encrypted-input → decrypt → optional XML → Kafka
-        //
-        // Activated by bridge.reverse-kafka.enabled=true. SCADA-side
-        // encrypted JSON arrives via a Connect RabbitMQ-source connector
-        // on inputTopic; this route decrypts, optionally converts to XML,
-        // and writes outputTopic where a Connect Artemis-sink connector
-        // drains it back to the TMS Artemis broker.
+        // REVERSE KAFKA (Stage C): Kafka raw → decrypt → optional XML → Kafka.
+        // Fed by scada-source routes (Stage B), drained by artemis-sink
+        // routes (Stage D). Enable with bridge.reverse-kafka.enabled=true.
         // ══════════════════════════════════════════════════════════════════
         if (config.getReverseKafka().isEnabled()) {
             BridgeConfig.ReverseKafka rev = config.getReverseKafka();
@@ -330,19 +314,10 @@ public class KafkaBridgeRoutes extends RouteBuilder {
         }
 
         // ══════════════════════════════════════════════════════════════════
-        // INBOUND ROUTES: RabbitMQ/MQTT → Artemis (SCADA → TMS direction)
-        //
-        // SCADA API publishes RSAE JSON to MQTT topic "scada/tms/alarms".
-        // RabbitMQ MQTT plugin maps that to routing key "scada.tms.alarms"
-        // on amq.topic, which lands in the declared queue.
-        // Camel picks up from the queue → optional JSON→XML → Artemis topic.
-        //
-        // Configure bridge.inbound[n] to enable.
-        //
-        // Skipped when bridge.reverse-kafka.enabled=true — that path covers
-        // the same SCADA→TMS direction via Connect+Kafka, and running both
-        // would split messages between two competing consumers on the same
-        // RabbitMQ queue.
+        // LEGACY INBOUND: RabbitMQ → Artemis direct (single hop, no Kafka).
+        // Auto-skipped when bridge.reverse-kafka.enabled=true (staged flow
+        // owns the same RabbitMQ queue and competing consumers would split
+        // messages). Enable with bridge.inbound[n] only in MQTT-direct mode.
         // ══════════════════════════════════════════════════════════════════
         if (config.getReverseKafka().isEnabled() && !config.getInbound().isEmpty()) {
             log.info("bridge.reverse-kafka.enabled=true — legacy inbound RabbitMQ→Artemis routes SKIPPED");
@@ -372,6 +347,62 @@ public class KafkaBridgeRoutes extends RouteBuilder {
 
             route.to("activemq:topic:" + inb.getToTopic())
                  .log("→ Artemis [" + inb.getToTopic() + "] delivered");
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // SCADA SOURCE (Stage B): RabbitMQ → Kafka.
+        // Consumes encrypted RSAE bytes from the SCADA-side RabbitMQ queue
+        // and writes them to a Kafka topic where the reverse-kafka stage
+        // picks them up.
+        // ══════════════════════════════════════════════════════════════════
+        for (BridgeConfig.ScadaSource src : config.getScadaSource()) {
+            String routeId = "scada-source-" + src.getRoutingKey().replace(".", "-")
+                           + "-to-kafka-" + src.getToKafkaTopic().replace(".", "-");
+
+            String fromUri = "spring-rabbitmq:" + src.getFromExchange()
+                    + "?routingKey=" + src.getRoutingKey()
+                    + "&autoStartup=true";
+            if (src.getQueue() != null && !src.getQueue().isBlank()) {
+                fromUri += "&queues=" + src.getQueue();
+            }
+
+            from(fromUri)
+                .routeId(routeId)
+                .log("← SCADA source [" + src.getRoutingKey() + "]")
+                .process(e -> {
+                    Object b = e.getIn().getBody();
+                    if (b instanceof String s) {
+                        e.getIn().setBody(s.getBytes(StandardCharsets.UTF_8));
+                    }
+                })
+                .to("kafka:" + src.getToKafkaTopic()
+                        + "?brokers={{kafka.brokers}}"
+                        + "&valueSerializer=" + BYTE_SER
+                        + "&keySerializer=" + BYTE_SER)
+                .log("→ Kafka [" + src.getToKafkaTopic() + "]");
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // ARTEMIS SINK (Stage D): Kafka → Artemis.
+        // Drains the processed (decrypted, optionally XML-converted) topic
+        // back to a TMS-side Artemis topic.
+        // ══════════════════════════════════════════════════════════════════
+        for (BridgeConfig.ArtemisSink sink : config.getArtemisSink()) {
+            String routeId = "artemis-sink-kafka-" + sink.getFromKafka().replace(".", "-")
+                           + "-to-" + sink.getToTopic().replace(".", "-");
+
+            from("kafka:" + sink.getFromKafka()
+                    + "?brokers={{kafka.brokers}}"
+                    + "&groupId=" + sink.getConsumerGroup()
+                    + "&autoOffsetReset=earliest"
+                    + "&valueDeserializer=" + BYTE_DESER
+                    + "&keyDeserializer=" + BYTE_DESER)
+                .routeId(routeId)
+                .log("← Kafka sink-input [" + sink.getFromKafka() + "]")
+                .process(e -> e.getIn().setBody(
+                        new String(e.getIn().getBody(byte[].class), StandardCharsets.UTF_8)))
+                .to("activemq:topic:" + sink.getToTopic())
+                .log("→ Artemis [" + sink.getToTopic() + "] delivered");
         }
 
         // ══════════════════════════════════════════════════════════════════

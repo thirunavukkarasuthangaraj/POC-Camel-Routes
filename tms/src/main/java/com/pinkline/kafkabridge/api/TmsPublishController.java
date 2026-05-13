@@ -20,7 +20,7 @@ import java.util.Set;
  *   POST /api/tms-publish/{topic}
  *     body: raw XML string (Content-Type: text/plain or application/xml)
  *     → publishes to activemq:topic:{topic}, picked up by the
- *       Connect tms-artemis-source connector and the rest of the chain.
+ *       outbound-* Camel route and forwarded through the pipeline.
  *
  * Topic must be one of the four configured Artemis topics (allow-list
  * to prevent abuse — anyone reaching this endpoint shouldn't be able to

@@ -2,7 +2,7 @@
 # start.sh — bring up the client-requested deployment end-to-end.
 #
 #   - Artemis: Docker (from D:/pinkline/code/messaging-infra)
-#   - Everything else (Zookeeper, Kafka, Kafdrop, Kafka Connect, bridge,
+#   - Everything else (Zookeeper, Kafka, Kafdrop, bridge,
 #     RabbitMQ, SCADA API): minikube
 #
 # Idempotent: re-running after a crash or partial failure converges to the
@@ -20,7 +20,7 @@ ok()   { printf '\033[1;32m  ✓ %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;33m  ! %s\033[0m\n' "$*"; }
 die()  { printf '\033[1;31m  ✗ %s\033[0m\n' "$*" >&2; exit 1; }
 
-# ── 0. Kill rogue host containers that bind ports we'll port-forward ────
+# ── 0a. Kill rogue host containers that bind ports we'll port-forward ───
 # A previous standalone `docker run` of scada-api / monitor / etc. can keep
 # binding 0.0.0.0:8091 etc. after we move to k8s. Chrome then hits the old
 # container instead of `kubectl port-forward` (which binds 127.0.0.1 only).
@@ -32,6 +32,19 @@ for name in pas-scada-api pas-scada-monitor pas-scada-demo external-scada-scada-
     ok "removed rogue container: $name"
   fi
 done
+
+# ── 0b. Delete orphan Kafka Connect resources (from before Connect was removed) ──
+# We removed connect/ from the repo, but a previously-applied kafka-connect
+# Deployment/Service/ConfigMap/Secret can still linger in the cluster and
+# crashloop indefinitely. Clean them defensively each run.
+log "Cleaning orphan Kafka Connect resources"
+kubectl -n pinkline delete deploy kafka-connect    --ignore-not-found 2>/dev/null || true
+kubectl -n pinkline delete svc    kafka-connect    --ignore-not-found 2>/dev/null || true
+kubectl -n pinkline delete cm     connectors       --ignore-not-found 2>/dev/null || true
+kubectl -n pinkline delete cm     connect-config   --ignore-not-found 2>/dev/null || true
+kubectl -n pinkline delete secret connect-secret   --ignore-not-found 2>/dev/null || true
+kubectl -n pinkline delete job    register-connectors --ignore-not-found 2>/dev/null || true
+ok "orphan Connect resources cleaned (if any)"
 
 # ── 1. minikube ─────────────────────────────────────────────────────────
 log "Checking minikube"
@@ -49,17 +62,7 @@ log "Starting Artemis from $MESSAGING_INFRA"
 docker compose -f "$MESSAGING_INFRA/docker-compose.yml" up -d
 ok "Artemis up (port 61616 / console 8161)"
 
-# ── 3. Build Connect image if not present ───────────────────────────────
-log "Connect image"
-if docker image inspect pinkline/pas-scada-connect:latest >/dev/null 2>&1; then
-  ok "pinkline/pas-scada-connect:latest already built"
-else
-  warn "building pinkline/pas-scada-connect:latest (this takes a few minutes the first time)"
-  docker build -t pinkline/pas-scada-connect:latest "$SCRIPT_DIR/connect/"
-  ok "Connect image built"
-fi
-
-# ── 3b. Build Bridge image from current source ──────────────────────────
+# ── 3. Build Bridge image from current source ───────────────────────────
 # Rebuild whenever Java sources change. Maven layer cache keeps it cheap
 # when nothing changed; full build is ~3 min on cold cache.
 log "Building Bridge image"
@@ -89,7 +92,6 @@ ok "demo image built"
 log "Loading images into minikube"
 IMAGES=(
   pinkline/pas-scada-bridge:latest
-  pinkline/pas-scada-connect:latest
   pinkline/pas-scada-monitor:latest
   pinkline/pas-scada-demo:1.0.0
   ghcr.io/thirunavukkarasuthangaraj/pas-scada-api:latest
@@ -139,16 +141,22 @@ for f in 00-namespace.yaml 10-rabbitmq-configmap.yaml 20-rabbitmq-secret.yaml \
 done
 ok "scada manifests applied"
 
-# ── 8. Patch imagePullPolicy + bridge probe timings ─────────────────────
-# imagePullPolicy=IfNotPresent  → use loaded local images instead of pulling :latest
-# Bridge probes need ~3min headroom — Spring Boot + Camel boot takes ~100s on minikube.
-log "Patching imagePullPolicy and bridge probe timings"
+# ── 8. Patch imagePullPolicy + bridge probe paths/timeouts ──────────────
+# imagePullPolicy=IfNotPresent → use loaded local images
+# Probe paths use lightweight /readiness + /liveness (full /health JSON
+# was timing out at 1s on minikube — the readiness component aggregates
+# JMS + Kafka + RabbitMQ health checks, which can take 2-3s to compute).
+log "Patching imagePullPolicy and bridge probe config"
 kubectl -n pinkline patch deploy pas-scada-bridge --type=json \
   -p='[
     {"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"IfNotPresent"},
+    {"op":"replace","path":"/spec/template/spec/containers/0/livenessProbe/httpGet/path","value":"/actuator/health/liveness"},
     {"op":"replace","path":"/spec/template/spec/containers/0/livenessProbe/initialDelaySeconds","value":180},
+    {"op":"replace","path":"/spec/template/spec/containers/0/livenessProbe/timeoutSeconds","value":5},
     {"op":"replace","path":"/spec/template/spec/containers/0/livenessProbe/failureThreshold","value":5},
+    {"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/httpGet/path","value":"/actuator/health/readiness"},
     {"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/initialDelaySeconds","value":120},
+    {"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/timeoutSeconds","value":5},
     {"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/failureThreshold","value":10}
   ]' 2>/dev/null \
   || kubectl -n pinkline patch deploy pas-scada-bridge --type=json \
@@ -179,7 +187,9 @@ ok "Kafka ready"
 log "Bootstrapping Kafka topics"
 kubectl -n pinkline delete job bootstrap-kafka-topics --ignore-not-found
 kubectl apply -f "$SCRIPT_DIR/bootstrap/k8s/10-kafka-topics-job.yaml"
-kubectl -n pinkline wait --for=condition=complete job/bootstrap-kafka-topics --timeout=240s
+# 480s — Kafka can need 1-2 min of post-Ready warmup before accepting
+# new-topic create calls (controller election, metadata sync, etc.).
+kubectl -n pinkline wait --for=condition=complete job/bootstrap-kafka-topics --timeout=480s
 ok "topics ready"
 
 # ── 10. Wait for RabbitMQ, declare scada queue + binding in-cluster ─────
@@ -210,27 +220,7 @@ kubectl -n scada run rmq-bind-$$ --rm -i --restart=Never \
     echo "queue + binding OK"
   ' || warn "queue/binding declare failed — verify with: kubectl -n scada exec deploy/rabbitmq -- rabbitmqctl list_queues"
 
-# ── 11. Apply Connect + register connectors ─────────────────────────────
-log "Applying connect/k8s manifests"
-kubectl apply -f "$SCRIPT_DIR/connect/k8s/10-secret.yaml"
-kubectl apply -f "$SCRIPT_DIR/connect/k8s/20-configmap.yaml"
-kubectl apply -f "$SCRIPT_DIR/connect/k8s/30-deployment.yaml"
-# Restart so a force-loaded connect image rolls into the running pod.
-kubectl -n pinkline rollout restart deploy/kafka-connect 2>/dev/null || true
-ok "Connect deployment applied"
-
-log "Waiting for Kafka Connect REST API"
-kubectl -n pinkline rollout status deploy/kafka-connect --timeout=480s
-kubectl -n pinkline wait --for=condition=ready pod -l app=kafka-connect --timeout=480s
-ok "Connect ready"
-
-log "Registering connectors"
-kubectl -n pinkline delete job register-connectors --ignore-not-found
-kubectl apply -f "$SCRIPT_DIR/connect/k8s/40-job-register.yaml"
-kubectl -n pinkline wait --for=condition=complete job/register-connectors --timeout=180s \
-  || warn "register-connectors job did not complete cleanly — check: kubectl -n pinkline logs job/register-connectors"
-
-# ── 11b. Apply Monitor + Demo ───────────────────────────────────────────
+# ── 11. Apply Monitor + Demo ────────────────────────────────────────────
 log "Applying Monitor manifests"
 kubectl apply -f "$SCRIPT_DIR/monitor/k8s/30-pvc.yaml"
 kubectl apply -f "$SCRIPT_DIR/monitor/k8s/20-secret.yaml"
@@ -275,9 +265,6 @@ cat <<EOF
   Kafdrop:          kubectl -n pinkline port-forward svc/kafdrop 9000:9000
                     → http://localhost:9000
 
-  Kafka Connect:    kubectl -n pinkline port-forward svc/kafka-connect 8083:8083
-                    → http://localhost:8083/connectors
-
   Health monitor:   kubectl -n pinkline port-forward svc/pas-scada-monitor 8080:8080
                     → http://localhost:8080            (live up/down dashboard)
                     → http://localhost:8080/state      (JSON of all probes)
@@ -288,6 +275,9 @@ cat <<EOF
 
   RabbitMQ admin:   kubectl -n scada port-forward svc/rabbitmq-internal 15672:15672
                     → http://localhost:15672  (thiru/password)
+
+  RabbitMQ MQTT:    kubectl -n scada port-forward svc/rabbitmq-internal 1883:1883
+                    → mqtt://localhost:1883  (thiru/password — for MQTT Explorer)
 
   SCADA API:        kubectl -n scada port-forward svc/scada-api-internal 8091:8091
                     → http://localhost:8091/api/status

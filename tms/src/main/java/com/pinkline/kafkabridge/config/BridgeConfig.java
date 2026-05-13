@@ -46,6 +46,11 @@ import java.util.List;
  *   bridge.inbound[0].routing-key    = RabbitMQ routing key
  *   bridge.inbound[0].to-topic       = Artemis topic to publish to
  *
+ * ── Staged reverse (RabbitMQ → Kafka → Artemis) ──────────────────
+ *   bridge.scada-source[0].*  = RabbitMQ source → Kafka (Stage B)
+ *   bridge.artemis-sink[0].*  = Kafka → Artemis sink (Stage D)
+ *   Stage C is bridge.reverse-kafka.* above.
+ *
  * ── Monitor (optional in-bridge API feed) ─────────────────────────
  *   bridge.monitor.enabled = true|false (default false)
  *   bridge.monitor.from-exchange  = RabbitMQ exchange to monitor
@@ -70,17 +75,11 @@ public class BridgeConfig {
     private String artemisTopics = "";
     private Kafka kafka = new Kafka();
 
-    // ── Connect-mode input: consume Kafka instead of Artemis ──────
-    // When inputKafka.enabled=true the Artemis-direct loop is SKIPPED
-    // and a single Kafka consumer route is wired up. Use this when
-    // a Kafka Connect source connector populates the input topic.
+    // ── Kafka-sourced input: consume Kafka instead of Artemis ─────
+    // When inputKafka.enabled=true the Artemis-direct loop is SKIPPED.
     private InputKafka inputKafka = new InputKafka();
 
-    // ── Reverse Kafka path (SCADA→TMS via Kafka) ──────────────────
-    // When reverseKafka.enabled=true a separate route reads the
-    // encrypted SCADA-side Kafka topic, decrypts, optionally
-    // converts to XML, and writes a processed Kafka topic that a
-    // Kafka Connect Artemis-sink connector can drain.
+    // ── Reverse Kafka path (Stage C): decrypt + optional XML ──────
     private ReverseKafka reverseKafka = new ReverseKafka();
 
     // ── Sinks ─────────────────────────────────────────────────────
@@ -92,6 +91,12 @@ public class BridgeConfig {
 
     // ── Inbound: RabbitMQ → Artemis (one entry per route) ────────
     private List<InboundRoute> inbound = new ArrayList<>();
+
+    // ── ScadaSource: RabbitMQ → Kafka (Stage B of reverse flow) ──
+    private List<ScadaSource> scadaSource = new ArrayList<>();
+
+    // ── ArtemisSink: Kafka → Artemis (Stage D of reverse flow) ───
+    private List<ArtemisSink> artemisSink = new ArrayList<>();
 
     // ── Monitor: optional in-bridge API feed ──────────────────────
     private Monitor monitor = new Monitor();
@@ -134,6 +139,12 @@ public class BridgeConfig {
 
     public List<InboundRoute> getInbound() { return inbound; }
     public void setInbound(List<InboundRoute> inbound) { this.inbound = inbound; }
+
+    public List<ScadaSource> getScadaSource() { return scadaSource; }
+    public void setScadaSource(List<ScadaSource> scadaSource) { this.scadaSource = scadaSource; }
+
+    public List<ArtemisSink> getArtemisSink() { return artemisSink; }
+    public void setArtemisSink(List<ArtemisSink> artemisSink) { this.artemisSink = artemisSink; }
 
     public Monitor getMonitor() { return monitor; }
     public void setMonitor(Monitor monitor) { this.monitor = monitor; }
@@ -228,12 +239,9 @@ public class BridgeConfig {
         public void setTopic(String topic) { this.topic = topic; }
     }
 
-    // ── Inner: Connect-mode input (Kafka source instead of Artemis) ──
+    // ── Inner: Kafka-sourced input (Kafka source instead of Artemis) ──
     // When enabled=true, skip the Artemis topic loop and consume from
-    // this Kafka topic. The XmlToJson + Encrypt processors run as today
-    // and the result is written via the configured pipeline. For a pure
-    // Connect-fronted setup, also set bridge.pipeline=kafka so RabbitMQ
-    // and MQTT writes are handled by Connect sink connectors instead.
+    // this Kafka topic. The XmlToJson + Encrypt processors run as today.
     public static class InputKafka {
         private boolean enabled = false;
         private String  topic         = "tms.raw";
@@ -247,11 +255,10 @@ public class BridgeConfig {
         public void setConsumerGroup(String consumerGroup) { this.consumerGroup = consumerGroup; }
     }
 
-    // ── Inner: Reverse Kafka path ────────────────────────────────
-    // When enabled=true a route consumes encrypted JSON bytes from
-    // inputTopic, decrypts, optionally converts JSON → XML, and writes
-    // to outputTopic. A Kafka Connect Artemis-sink can then drain the
-    // outputTopic into the TMS-side Artemis broker.
+    // ── Inner: Reverse Kafka path (Stage C of staged reverse flow) ──
+    // Reads encrypted JSON from inputTopic, decrypts, optionally
+    // converts JSON → XML, and writes outputTopic. Drained by an
+    // artemis-sink route into TMS-side Artemis.
     public static class ReverseKafka {
         private boolean enabled = false;
         private String  inputTopic    = "scada.tms.raw";
@@ -320,5 +327,36 @@ public class BridgeConfig {
 
         public boolean isConvertToXml() { return convertToXml; }
         public void setConvertToXml(boolean convertToXml) { this.convertToXml = convertToXml; }
+    }
+
+    // ── Inner: RabbitMQ → Kafka source (Stage B reverse) ─────────
+    public static class ScadaSource {
+        private String fromExchange;
+        private String routingKey;
+        private String queue;
+        private String toKafkaTopic;
+
+        public String getFromExchange() { return fromExchange; }
+        public void setFromExchange(String fromExchange) { this.fromExchange = fromExchange; }
+        public String getRoutingKey() { return routingKey; }
+        public void setRoutingKey(String routingKey) { this.routingKey = routingKey; }
+        public String getQueue() { return queue; }
+        public void setQueue(String queue) { this.queue = queue; }
+        public String getToKafkaTopic() { return toKafkaTopic; }
+        public void setToKafkaTopic(String toKafkaTopic) { this.toKafkaTopic = toKafkaTopic; }
+    }
+
+    // ── Inner: Kafka → Artemis sink (Stage D reverse) ────────────
+    public static class ArtemisSink {
+        private String fromKafka;
+        private String consumerGroup;
+        private String toTopic;
+
+        public String getFromKafka() { return fromKafka; }
+        public void setFromKafka(String fromKafka) { this.fromKafka = fromKafka; }
+        public String getConsumerGroup() { return consumerGroup; }
+        public void setConsumerGroup(String consumerGroup) { this.consumerGroup = consumerGroup; }
+        public String getToTopic() { return toTopic; }
+        public void setToTopic(String toTopic) { this.toTopic = toTopic; }
     }
 }

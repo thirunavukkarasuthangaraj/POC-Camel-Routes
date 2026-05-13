@@ -53,9 +53,9 @@ public class DecryptExample {
      */
     public static String decrypt(byte[] payload) throws Exception {
 
-        // 0. Auto-detect base64-encoded String payload (Connect pipeline) vs
-        //    raw bytes (legacy direct MQTT). Base64 contains only printable
-        //    [A-Za-z0-9+/=] chars; any non-printable means raw bytes.
+        // 0. Auto-detect base64-encoded String payload vs raw bytes.
+        //    Base64 contains only printable [A-Za-z0-9+/=] chars; any
+        //    non-printable byte means raw bytes.
         if (payload.length > 0 && isLikelyBase64(payload)) {
             try {
                 payload = Base64.getDecoder().decode(payload);

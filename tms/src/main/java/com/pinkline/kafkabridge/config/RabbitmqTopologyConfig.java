@@ -69,13 +69,12 @@ public class RabbitmqTopologyConfig {
     }
 
     @Bean
-    public List<Binding> inboundBindings(List<Queue> inboundQueues, TopicExchange scadaExchange) {
+    public List<Binding> inboundBindings(TopicExchange scadaExchange) {
         List<Binding> bindings = new ArrayList<>();
-        List<BridgeConfig.InboundRoute> routes = config.getInbound();
-        for (int i = 0; i < inboundQueues.size(); i++) {
-            bindings.add(BindingBuilder.bind(inboundQueues.get(i))
-                    .to(scadaExchange)
-                    .with(routes.get(i).getRoutingKey()));
+        for (BridgeConfig.InboundRoute inb : config.getInbound()) {
+            if (inb.getQueue() == null || inb.getQueue().isBlank()) continue;
+            Queue q = new Queue(inb.getQueue(), true, false, false);
+            bindings.add(BindingBuilder.bind(q).to(scadaExchange).with(inb.getRoutingKey()));
         }
         return bindings;
     }
