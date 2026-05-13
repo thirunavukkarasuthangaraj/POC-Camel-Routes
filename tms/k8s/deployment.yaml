@@ -18,6 +18,10 @@ spec:
       containers:
         - name: pas-scada-bridge
           image: pinkline/pas-scada-bridge:latest
+          # Never = use only the locally-built image (Docker Desktop k8s
+          # shares the host Docker daemon, so this works out of the box).
+          # For AKS/registry-pull, switch to IfNotPresent.
+          imagePullPolicy: Never
           ports:
             - containerPort: 8085
 

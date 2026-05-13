@@ -31,6 +31,11 @@ spec:
       containers:
         - name: scada-api
           image: ghcr.io/thirunavukkarasuthangaraj/pas-scada-api:latest
+          # Never = use the locally-built image only; do not pull from
+          # ghcr.io (registry copy can lag the local build, causing pods
+          # to run a stale endpoint set). For AKS/registry-pull use
+          # IfNotPresent here and let CI push a fresh tag to ACR.
+          imagePullPolicy: Never
           ports:
             - containerPort: 8091
               name: http

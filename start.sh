@@ -2,13 +2,18 @@
 # start.sh — bring up the client-requested deployment end-to-end.
 #
 #   - Artemis: Docker (from D:/pinkline/code/messaging-infra)
-#   - Everything else (Zookeeper, Kafka, Kafdrop, bridge,
-#     RabbitMQ, SCADA API): minikube
+#   - Everything else (Zookeeper, Kafka, Kafdrop, bridge, RabbitMQ,
+#     SCADA API): Docker Desktop Kubernetes (kubectl context docker-desktop)
+#
+# Docker Desktop k8s shares the host Docker daemon, so locally-built
+# images are available to pods immediately — no `minikube image load`
+# step required.
 #
 # Idempotent: re-running after a crash or partial failure converges to the
 # desired state. Safe to invoke repeatedly.
 #
-# Prerequisites: docker, minikube, kubectl on PATH.
+# Prerequisites: docker, kubectl on PATH; Docker Desktop with Kubernetes
+# enabled (Settings → Kubernetes → Enable Kubernetes).
 
 set -euo pipefail
 
@@ -46,14 +51,16 @@ kubectl -n pinkline delete secret connect-secret   --ignore-not-found 2>/dev/nul
 kubectl -n pinkline delete job    register-connectors --ignore-not-found 2>/dev/null || true
 ok "orphan Connect resources cleaned (if any)"
 
-# ── 1. minikube ─────────────────────────────────────────────────────────
-log "Checking minikube"
-if minikube status 2>/dev/null | grep -q "host: Running"; then
-  ok "minikube already running"
-else
-  minikube start --cpus=4 --memory=6144 --driver=docker
-  ok "minikube started"
+# ── 1. Docker Desktop Kubernetes ────────────────────────────────────────
+log "Ensuring docker-desktop kubectl context"
+if ! kubectl config get-contexts docker-desktop >/dev/null 2>&1; then
+  die "docker-desktop kubectl context not found. Enable Kubernetes in Docker Desktop → Settings → Kubernetes, then retry."
 fi
+kubectl config use-context docker-desktop >/dev/null
+if ! kubectl get nodes 2>/dev/null | grep -q ' Ready '; then
+  die "docker-desktop node is not Ready. Open Docker Desktop and wait for the kubectl light to turn green."
+fi
+ok "docker-desktop k8s ready"
 
 # ── 2. Artemis (Docker on host) ─────────────────────────────────────────
 log "Starting Artemis from $MESSAGING_INFRA"
@@ -88,39 +95,12 @@ log "Building Demo image"
 docker build -q -t pinkline/pas-scada-demo:1.0.0 "$SCRIPT_DIR/demo/" >/dev/null
 ok "demo image built"
 
-# ── 5. Load images into minikube ────────────────────────────────────────
-log "Loading images into minikube"
-IMAGES=(
-  pinkline/pas-scada-bridge:latest
-  pinkline/pas-scada-monitor:latest
-  pinkline/pas-scada-demo:1.0.0
-  ghcr.io/thirunavukkarasuthangaraj/pas-scada-api:latest
-  obsidiandynamics/kafdrop:4.0.1
-  confluentinc/cp-zookeeper:7.5.0
-  confluentinc/cp-kafka:7.5.0
-  rabbitmq:3.12-management
-  curlimages/curl:8.10.1
-)
-for img in "${IMAGES[@]}"; do
-  # For locally-built images (bridge, connect, scada-api), HARD-REPLACE so
-  # rebuilds always take effect. `minikube image load --overwrite` is
-  # unreliable across versions, so rmi from inside the minikube node first.
-  case "$img" in
-    pinkline/*|ghcr.io/thirunavukkarasuthangaraj/*)
-      minikube ssh -- "docker rmi -f $img" >/dev/null 2>&1 || true
-      minikube image load "$img" >/dev/null 2>&1 \
-        && ok "loaded (force-replaced): $img" \
-        || warn "failed to load: $img"
-      ;;
-    *)
-      if minikube image ls 2>/dev/null | grep -qF "$img"; then
-        ok "already loaded: $img"
-      else
-        minikube image load "$img" && ok "loaded: $img" || warn "failed to load: $img"
-      fi
-      ;;
-  esac
-done
+# ── 5. (No image-load step) ─────────────────────────────────────────────
+# Docker Desktop k8s reads images straight from the host Docker daemon —
+# locally-built `docker build` images are available to pods immediately,
+# no minikube-style image-load required.
+log "Skipping image load (Docker Desktop k8s shares host docker images)"
+ok "host docker daemon = cluster image source"
 
 # ── 6. Apply tms/k8s manifests ──────────────────────────────────────────
 log "Applying tms/k8s manifests"
@@ -128,7 +108,7 @@ kubectl apply -f "$SCRIPT_DIR/tms/k8s/00-namespace.yaml"
 kubectl apply -f "$SCRIPT_DIR/tms/k8s/20-zookeeper.yaml"
 kubectl apply -f "$SCRIPT_DIR/tms/k8s/30-kafka.yaml"
 kubectl apply -f "$SCRIPT_DIR/tms/k8s/40-kafdrop.yaml"
-kubectl apply -f "$SCRIPT_DIR/tms/k8s/overlay-minikube.yaml"
+kubectl apply -f "$SCRIPT_DIR/tms/k8s/overlay-local.yaml"
 kubectl apply -f "$SCRIPT_DIR/tms/k8s/deployment.yaml"
 ok "tms manifests applied"
 
@@ -224,7 +204,7 @@ kubectl -n scada run rmq-bind-$$ --rm -i --restart=Never \
 log "Applying Monitor manifests"
 kubectl apply -f "$SCRIPT_DIR/monitor/k8s/30-pvc.yaml"
 kubectl apply -f "$SCRIPT_DIR/monitor/k8s/20-secret.yaml"
-kubectl apply -f "$SCRIPT_DIR/monitor/k8s/overlay-minikube.yaml"
+kubectl apply -f "$SCRIPT_DIR/monitor/k8s/overlay-local.yaml"
 kubectl apply -f "$SCRIPT_DIR/monitor/k8s/40-deployment.yaml"
 kubectl -n pinkline patch deploy pas-scada-monitor --type=json \
   -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"IfNotPresent"}]' \

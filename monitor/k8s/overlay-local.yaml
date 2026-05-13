@@ -26,7 +26,7 @@ data:
 
       - name: artemis-openwire
         type: tcp
-        host: host.minikube.internal
+        host: host.docker.internal
         port: 61616
         timeout_s: 5
         fail_threshold: 3
@@ -34,7 +34,7 @@ data:
 
       - name: artemis-console
         type: http
-        url:  http://host.minikube.internal:8161/console/login
+        url:  http://host.docker.internal:8161/console/login
         timeout_s: 5
         fail_threshold: 3
         recover_threshold: 2
