@@ -44,6 +44,7 @@ import binascii
 import json
 import os
 import random
+import socket
 import threading
 import time
 from collections import deque
@@ -814,10 +815,198 @@ def api_stream():
                              "X-Accel-Buffering": "no"})
 
 
+# ══════════════════════════════════════════════════════════════════════
+# Power SCADA publisher — pushes JSON payloads to Artemis broker on
+# topic POWER_SCADA_TMS_INFO. The downstream C++ Power Dashboard app
+# subscribes via STOMP and renders the segment power states.
+# Modes:
+#   random  — every segment gets a random status 0..3 (debug feed)
+#   all_on  — every segment energized (powerStatus=1)  → all rails green
+#   all_off — every segment de-energized (powerStatus=2) → all rails red
+#   mixed   — 70% energized / 20% no power / 10% error (realistic)
+# ══════════════════════════════════════════════════════════════════════
+ARTEMIS_HOST  = os.getenv("ARTEMIS_HOST",  "host.docker.internal")
+ARTEMIS_PORT  = int(os.getenv("ARTEMIS_PORT", "61616"))
+ARTEMIS_USER  = os.getenv("ARTEMIS_USER",  "admin")
+ARTEMIS_PASS  = os.getenv("ARTEMIS_PASS",  "admin")
+ARTEMIS_TOPIC = os.getenv("ARTEMIS_TOPIC", "POWER_SCADA_TMS_INFO")
+
+POWER_SEGMENT_IDS = [
+    "seg1111", "seg321", "seg1345", "seg222",
+    "r2a", "r2b", "r2c", "r2d", "r2e",
+    "r3a", "r3b", "r3c", "r3d", "r3e",
+    "r4a", "r4b", "r4c", "r4d", "r4e", "r4f",
+    "r5a", "r5b", "r5c", "r5d", "r5e",
+    "r6a", "r6b", "r6c", "r6d", "r6e",
+    "r7a", "r7b", "r7c", "r7d", "r7e",
+    "r8a", "r8b", "r8c", "r8d", "r8e",
+    "r9a", "r9b", "r9c", "r9d", "r9e",
+]
+POWER_MODES = ("random", "all_on", "all_off", "mixed")
+
+power_scada_pub = {
+    "enabled":    False,
+    "interval_s": 5,
+    "mode":       "mixed",
+    "sent":       0,
+    "errors":     0,
+    "last_at":    None,
+    "last_error": None,
+}
+
+
+def _power_scada_payload(mode: str) -> dict:
+    """Build a fresh Power SCADA JSON payload for `mode`."""
+    now = datetime.now(timezone.utc)
+    seq = power_scada_pub["sent"] + 1
+
+    if mode == "all_on":
+        statuses = {sid: 1 for sid in POWER_SEGMENT_IDS}
+    elif mode == "all_off":
+        statuses = {sid: 2 for sid in POWER_SEGMENT_IDS}
+    elif mode == "mixed":
+        statuses = {}
+        for sid in POWER_SEGMENT_IDS:
+            r = random.random()
+            statuses[sid] = 1 if r < 0.70 else (2 if r < 0.90 else 3)
+    else:  # random
+        statuses = {sid: random.randint(0, 3) for sid in POWER_SEGMENT_IDS}
+
+    return {
+        "metadata": {
+            "messageType":   "POWER_SCADA_TMS_INFO",
+            "schemaVersion": "1.0",
+            "timestamp":     now.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        },
+        "header": {
+            "SourceId":  "SCADA",
+            "health":    1,
+            "healthSeq": seq,
+        },
+        "powerSegmentsStatus": [
+            {"segmentID": sid, "powerStatus": st}
+            for sid, st in statuses.items()
+        ],
+    }
+
+
+def _power_scada_publish_json(payload: dict) -> None:
+    """Send a JSON payload to Artemis via STOMP over a single short
+    connection. Raises on any failure."""
+    body = json.dumps(payload)
+    sock = socket.create_connection((ARTEMIS_HOST, ARTEMIS_PORT), timeout=5)
+    try:
+        sock.settimeout(5)
+        connect_frame = (
+            "CONNECT\n"
+            "accept-version:1.2\n"
+            f"host:{ARTEMIS_HOST}\n"
+            f"login:{ARTEMIS_USER}\n"
+            f"passcode:{ARTEMIS_PASS}\n"
+            "heart-beat:0,0\n"
+            "\n\x00"
+        )
+        sock.sendall(connect_frame.encode("utf-8"))
+
+        resp = b""
+        while b"\x00" not in resp:
+            chunk = sock.recv(4096)
+            if not chunk:
+                raise RuntimeError("Artemis closed socket during CONNECT")
+            resp += chunk
+        if b"CONNECTED" not in resp.split(b"\x00", 1)[0]:
+            raise RuntimeError(f"STOMP CONNECT rejected: {resp[:200]!r}")
+
+        send_frame = (
+            "SEND\n"
+            f"destination:{ARTEMIS_TOPIC}\n"
+            "content-type:application/json\n"
+            "\n"
+            f"{body}\x00"
+        )
+        sock.sendall(send_frame.encode("utf-8"))
+        try:
+            sock.sendall(b"DISCONNECT\n\n\x00")
+        except OSError:
+            pass
+    finally:
+        sock.close()
+
+
+def _power_scada_record_ok():
+    power_scada_pub["sent"] += 1
+    power_scada_pub["last_at"] = now_iso()
+    power_scada_pub["last_error"] = None
+
+
+def _power_scada_record_err(e: Exception):
+    power_scada_pub["errors"] += 1
+    power_scada_pub["last_error"] = f"{type(e).__name__}: {e}"
+
+
+def _power_scada_loop():
+    while True:
+        if power_scada_pub["enabled"]:
+            try:
+                _power_scada_publish_json(_power_scada_payload(power_scada_pub["mode"]))
+                _power_scada_record_ok()
+            except Exception as e:
+                _power_scada_record_err(e)
+            time.sleep(max(1, int(power_scada_pub["interval_s"])))
+        else:
+            time.sleep(0.5)
+
+
+@app.route("/api/power-scada/publish", methods=["POST"])
+def api_power_scada_publish_now():
+    """Manual one-shot publish to Artemis.
+    Body: {"mode": "...", "payload": {...}} — both optional."""
+    body = request.get_json(silent=True) or {}
+    mode = body.get("mode") or power_scada_pub["mode"]
+    if mode not in POWER_MODES:
+        return jsonify({"ok": False, "error": "unknown mode", "allowed": list(POWER_MODES)}), 400
+    payload = body.get("payload") or _power_scada_payload(mode)
+    try:
+        _power_scada_publish_json(payload)
+        _power_scada_record_ok()
+        return jsonify({"ok": True, "sent": power_scada_pub["sent"], "mode": mode})
+    except Exception as e:
+        _power_scada_record_err(e)
+        return jsonify({"ok": False, "error": str(e)}), 502
+
+
+@app.route("/api/power-scada/config", methods=["POST"])
+def api_power_scada_config():
+    """Update auto-publisher config. Body keys: enabled, interval_s, mode."""
+    body = request.get_json(silent=True) or {}
+    if "enabled" in body:
+        power_scada_pub["enabled"] = bool(body["enabled"])
+    if "interval_s" in body:
+        try:
+            power_scada_pub["interval_s"] = max(1, int(body["interval_s"]))
+        except Exception:
+            pass
+    if "mode" in body and body["mode"] in POWER_MODES:
+        power_scada_pub["mode"] = body["mode"]
+    return jsonify(power_scada_pub)
+
+
+@app.route("/api/power-scada/state")
+def api_power_scada_state():
+    return jsonify({
+        **power_scada_pub,
+        "topic":   ARTEMIS_TOPIC,
+        "broker":  f"{ARTEMIS_HOST}:{ARTEMIS_PORT}",
+        "modes":   list(POWER_MODES),
+        "segments_total": len(POWER_SEGMENT_IDS),
+    })
+
+
 if __name__ == "__main__":
     threading.Thread(target=mqtt_loop,             daemon=True).start()
     threading.Thread(target=keepalive_timer,       daemon=True).start()
     threading.Thread(target=auto_alarm_timer,      daemon=True).start()
     threading.Thread(target=send_all_alarms_timer, daemon=True).start()
     threading.Thread(target=get_all_alarms_timer,  daemon=True).start()
+    threading.Thread(target=_power_scada_loop,     daemon=True, name="power-scada-publisher").start()
     app.run(host="0.0.0.0", port=8091, threaded=True)

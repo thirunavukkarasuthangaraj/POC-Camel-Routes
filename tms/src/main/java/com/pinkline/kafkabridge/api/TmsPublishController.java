@@ -1,5 +1,6 @@
 package com.pinkline.kafkabridge.api;
 
+import com.pinkline.kafkabridge.config.BridgeConfig;
 import org.apache.camel.ProducerTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -7,8 +8,11 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * TmsPublishController
@@ -22,9 +26,8 @@ import java.util.Set;
  *     → publishes to activemq:topic:{topic}, picked up by the
  *       outbound-* Camel route and forwarded through the pipeline.
  *
- * Topic must be one of the four configured Artemis topics (allow-list
- * to prevent abuse — anyone reaching this endpoint shouldn't be able to
- * write to arbitrary destinations).
+ * Topic must be one of the configured Artemis topics (allow-list driven
+ * from bridge.artemis-topics in application.properties — no hardcoding).
  */
 @RestController
 @RequestMapping("/api/tms-publish")
@@ -32,27 +35,32 @@ import java.util.Set;
 public class TmsPublishController {
 
     private static final Logger log = LoggerFactory.getLogger(TmsPublishController.class);
-    private static final Set<String> ALLOWED = Set.of(
-            "TMS.PISInfo",
-            "RCS.E2K.TMS.TrafficReportClient",
-            "TSInfo",
-            "RCS.E2K.TMS.RouteInfo");
 
     private final ProducerTemplate producer;
+    private final BridgeConfig config;
 
-    public TmsPublishController(ProducerTemplate producer) {
+    public TmsPublishController(ProducerTemplate producer, BridgeConfig config) {
         this.producer = producer;
+        this.config = config;
+    }
+
+    private Set<String> allowed() {
+        return Arrays.stream(config.getArtemisTopics().split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     @PostMapping(value = "/{topic}", consumes = MediaType.ALL_VALUE)
     public ResponseEntity<Map<String, Object>> publish(
             @PathVariable String topic,
             @RequestBody String body) {
-        if (!ALLOWED.contains(topic)) {
+        Set<String> allow = allowed();
+        if (!allow.contains(topic)) {
             return ResponseEntity.badRequest().body(Map.of(
                     "ok", false,
                     "error", "topic not in allow-list",
-                    "allowed", ALLOWED));
+                    "allowed", allow));
         }
         if (body == null || body.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of(
@@ -69,6 +77,6 @@ public class TmsPublishController {
 
     @GetMapping("/topics")
     public Set<String> topics() {
-        return ALLOWED;
+        return allowed();
     }
 }
