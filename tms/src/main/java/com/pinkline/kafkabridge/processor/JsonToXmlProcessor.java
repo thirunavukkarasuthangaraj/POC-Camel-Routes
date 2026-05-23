@@ -11,25 +11,18 @@ import org.slf4j.LoggerFactory;
 /**
  * JsonToXmlProcessor
  *
- * Reverse of XmlToJsonProcessor — converts RSAE JSON from SCADA API into XML
- * so TMS applications that expect XML on Artemis topics can consume it directly.
+ * Generic, schema-agnostic JSON → XML converter — the reverse of
+ * {@link XmlToJsonProcessor}.
  *
- * Config: bridge.inbound[n].convert-to-xml=true   (default: false = pass JSON as-is)
- *
- * Input (from ScadaInboundProcessor):
- *   { "type": "UpdateAlarm", "creatorId": "ScateX", "timestamp": "...", "alarms": [...] }
- *
- * Output XML:
- *   <RSAEMessage>
- *     <type>UpdateAlarm</type>
- *     <creatorId>ScateX</creatorId>
- *     <timestamp>...</timestamp>
- *     <alarms>...</alarms>
- *   </RSAEMessage>
+ * The XML root element name is taken from the "xmlRootName" header (set from
+ * config, never hardcoded here). If the header is absent and the JSON is a
+ * single-field object, that field is used as the root and unwrapped. Otherwise
+ * the message is forwarded unchanged.
  */
 public class JsonToXmlProcessor implements Processor {
 
     private static final Logger log = LoggerFactory.getLogger(JsonToXmlProcessor.class);
+
     private static final ObjectMapper jsonMapper = new ObjectMapper();
     private static final XmlMapper xmlMapper = new XmlMapper();
 
@@ -44,18 +37,36 @@ public class JsonToXmlProcessor implements Processor {
 
         try {
             JsonNode root = jsonMapper.readTree(json);
-            // Wrap in RSAEMessage root element and serialize to XML
+
+            // Root element name comes from config via the header — no static name here.
+            String rootName = exchange.getIn().getHeader("xmlRootName", String.class);
+
+            // No header supplied: if the JSON is a single-field object, use that
+            // field as the root and serialize its value.
+            if ((rootName == null || rootName.isBlank())
+                    && root.isObject() && root.size() == 1) {
+                String only = root.fieldNames().next();
+                rootName = only;
+                root = root.get(only);
+            }
+
+            if (rootName == null || rootName.isBlank()) {
+                log.warn("JsonToXml — no xmlRootName header and JSON is not single-rooted, "
+                        + "forwarding JSON unchanged");
+                return;
+            }
+
             String xml = xmlMapper.writer()
-                    .withRootName("RSAEMessage")
+                    .withRootName(rootName)
                     .writeValueAsString(root);
 
             exchange.getIn().setBody(xml);
             exchange.getIn().setHeader("Content-Type", "application/xml");
-            log.debug("JsonToXml — converted RSAE JSON to XML ({} chars)", xml.length());
+            log.debug("JsonToXml — converted JSON to <{}> XML ({} chars)", rootName, xml.length());
 
         } catch (Exception e) {
             log.error("JsonToXml — conversion failed, forwarding raw JSON: {}", e.getMessage());
-            // Non-fatal: pass JSON as-is rather than dropping the message
+            // Non-fatal: pass JSON as-is rather than dropping the message.
         }
     }
 }

@@ -265,6 +265,9 @@ public class BridgeConfig {
         private String  outputTopic   = "scada.tms.processed";
         private String  consumerGroup = "pas-bridge-reverse";
         private boolean convertToXml  = false;
+        // XML root element name used when convertToXml=true. Property-driven —
+        // no hardcoded name in the processor. e.g. bridge.reverse-kafka.xml-root-name=RSAEMessage
+        private String  xmlRootName    = "";
         // SCADA→TMS direction: defaults true (decrypt incoming) for back-compat,
         // set false when SCADA publishes plain JSON.
         private boolean encryptEnabled = true;
@@ -279,6 +282,8 @@ public class BridgeConfig {
         public void setConsumerGroup(String consumerGroup) { this.consumerGroup = consumerGroup; }
         public boolean isConvertToXml() { return convertToXml; }
         public void setConvertToXml(boolean convertToXml) { this.convertToXml = convertToXml; }
+        public String getXmlRootName() { return xmlRootName; }
+        public void setXmlRootName(String xmlRootName) { this.xmlRootName = xmlRootName; }
         public boolean isEncryptEnabled() { return encryptEnabled; }
         public void setEncryptEnabled(boolean encryptEnabled) { this.encryptEnabled = encryptEnabled; }
     }
@@ -312,6 +317,8 @@ public class BridgeConfig {
         // true  = convert RSAE JSON → XML before publishing to Artemis
         // false = forward JSON as-is (default; TMS consumes JSON directly)
         private boolean convertToXml = false;
+        // XML root element name used when convertToXml=true. Property-driven.
+        private String xmlRootName = "";
 
         public String getFromExchange() { return fromExchange; }
         public void setFromExchange(String fromExchange) { this.fromExchange = fromExchange; }
@@ -327,6 +334,8 @@ public class BridgeConfig {
 
         public boolean isConvertToXml() { return convertToXml; }
         public void setConvertToXml(boolean convertToXml) { this.convertToXml = convertToXml; }
+        public String getXmlRootName() { return xmlRootName; }
+        public void setXmlRootName(String xmlRootName) { this.xmlRootName = xmlRootName; }
     }
 
     // ── Inner: RabbitMQ → Kafka source (Stage B reverse) ─────────

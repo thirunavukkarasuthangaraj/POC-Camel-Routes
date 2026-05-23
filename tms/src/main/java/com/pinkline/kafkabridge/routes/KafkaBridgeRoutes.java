@@ -272,6 +272,10 @@ public class KafkaBridgeRoutes extends RouteBuilder {
             }
 
             if (rev.isConvertToXml()) {
+                final String rootName = rev.getXmlRootName();
+                if (rootName != null && !rootName.isBlank()) {
+                    route.setHeader("xmlRootName", constant(rootName));
+                }
                 route.process(new JsonToXmlProcessor());
             }
             // Always emit byte[] to Kafka regardless of upstream String/XML.
@@ -342,6 +346,10 @@ public class KafkaBridgeRoutes extends RouteBuilder {
                 .process(new ScadaInboundProcessor());
 
             if (inb.isConvertToXml()) {
+                final String rootName = inb.getXmlRootName();
+                if (rootName != null && !rootName.isBlank()) {
+                    route.setHeader("xmlRootName", constant(rootName));
+                }
                 route.process(new JsonToXmlProcessor());
             }
 
