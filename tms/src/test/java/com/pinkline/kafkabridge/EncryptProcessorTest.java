@@ -18,9 +18,13 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Unit test for EncryptProcessor.
  *
+ * The processor emits a base64-encoded String whose decoded bytes are the
+ * wire format [12B IV][ciphertext + 16B GCM tag] — matching how
+ * {@link com.pinkline.kafkabridge.processor.DecryptExample} consumes it.
+ *
  * Verifies:
- *  1. Output is byte[] (not plain text)
- *  2. Wire format: [12B IV][ciphertext][16B GCM tag]
+ *  1. Output is a base64 String
+ *  2. Decoded wire format: [12B IV][ciphertext][16B GCM tag]
  *  3. Decryption with same key recovers original JSON
  *  4. Different messages produce different ciphertext (fresh IV)
  */
@@ -38,7 +42,7 @@ class EncryptProcessorTest {
     // In production it is set externally: export SCADA_AES_KEY=<base64-key>
 
     @Test
-    void testOutputIsByteArray() throws Exception {
+    void testOutputIsBase64String() throws Exception {
         EncryptProcessor processor = new EncryptProcessor();
         Exchange exchange = new DefaultExchange(new DefaultCamelContext());
         exchange.getIn().setBody(SAMPLE_JSON);
@@ -46,7 +50,9 @@ class EncryptProcessorTest {
         processor.process(exchange);
 
         Object body = exchange.getIn().getBody();
-        assertInstanceOf(byte[].class, body, "Output must be byte[]");
+        assertInstanceOf(String.class, body, "Output must be a base64 String");
+        // Must be valid base64 (throws if not)
+        assertDoesNotThrow(() -> Base64.getDecoder().decode((String) body));
     }
 
     @Test
@@ -57,7 +63,7 @@ class EncryptProcessorTest {
 
         processor.process(exchange);
 
-        byte[] payload = exchange.getIn().getBody(byte[].class);
+        byte[] payload = Base64.getDecoder().decode(exchange.getIn().getBody(String.class));
 
         // Minimum: 12 (IV) + 1 (ciphertext) + 16 (GCM tag) = 29 bytes
         assertTrue(payload.length >= 29,
@@ -74,7 +80,7 @@ class EncryptProcessorTest {
 
         processor.process(exchange);
 
-        byte[] payload = exchange.getIn().getBody(byte[].class);
+        byte[] payload = Base64.getDecoder().decode(exchange.getIn().getBody(String.class));
 
         // Extract IV (first 12 bytes)
         byte[] iv = new byte[12];
@@ -112,10 +118,10 @@ class EncryptProcessorTest {
         ex2.getIn().setBody(SAMPLE_JSON);
         processor.process(ex2);
 
-        byte[] payload1 = ex1.getIn().getBody(byte[].class);
-        byte[] payload2 = ex2.getIn().getBody(byte[].class);
+        String payload1 = ex1.getIn().getBody(String.class);
+        String payload2 = ex2.getIn().getBody(String.class);
 
-        assertFalse(java.util.Arrays.equals(payload1, payload2),
+        assertNotEquals(payload1, payload2,
             "Same JSON must produce different ciphertext (different IV each time)");
 
         System.out.println("Verified: fresh IV per message — ciphertexts differ");

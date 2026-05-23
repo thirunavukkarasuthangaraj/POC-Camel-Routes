@@ -30,7 +30,7 @@ import java.util.Base64;
  *   2. Set it as an environment variable on the SCADA server:
  *        export SCADA_AES_KEY=<base64-256bit-key>
  *   3. Call DecryptExample.decrypt(payload) with the raw byte[] from Kafka/MQTT
- *   4. Returns the JSON string: {"messageType":"TMS_PAS_UPDATE", ...}
+ *   4. Returns the decrypted JSON string (structure mirrors the source message)
  *
  * IMPORTANT:
  *   - The GCM tag is verified automatically during decryption
@@ -48,7 +48,7 @@ public class DecryptExample {
      * or from MQTT topic tms/scada/pas.
      *
      * @param payload  raw byte[] from Kafka/MQTT
-     * @return         JSON string — ICD format TMS_PAS_UPDATE
+     * @return         decrypted JSON string
      * @throws Exception  if decryption fails or key not set
      */
     public static String decrypt(byte[] payload) throws Exception {
