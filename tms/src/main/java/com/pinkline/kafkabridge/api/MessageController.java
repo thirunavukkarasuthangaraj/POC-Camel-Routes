@@ -13,8 +13,10 @@ import java.util.function.Consumer;
 /**
  * REST API for received SCADA messages.
  *
- * GET /api/messages        — all messages (JSON array)
- * GET /api/messages/stream — live Server-Sent Events stream (real-time)
+ * GET /api/messages                       — all messages (JSON array)
+ * GET /api/messages?schema=ATRTimeTableMsg — only that feed
+ * GET /api/messages?topic=TMS.PISInfo      — only that source topic
+ * GET /api/messages/stream                 — live Server-Sent Events stream
  */
 @RestController
 @RequestMapping("/api/messages")
@@ -28,10 +30,12 @@ public class MessageController {
         this.store = store;
     }
 
-    /** Returns all received messages as JSON array */
+    /** Returns received messages, optionally filtered by topic and/or schema. */
     @GetMapping
-    public List<MessageStore.ScadaMessage> getAll() {
-        return store.getAll();
+    public List<MessageStore.ScadaMessage> get(
+            @RequestParam(required = false) String topic,
+            @RequestParam(required = false) String schema) {
+        return store.find(topic, schema);
     }
 
     /** Real-time SSE stream — browser receives each message as it arrives */

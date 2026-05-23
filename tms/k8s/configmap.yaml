@@ -32,7 +32,13 @@ data:
   MQTT_PORT: "1884"                 # host-mapped MQTT port on SCADA VM
 
   # ── Bridge pipeline & behaviour (configurable per env) ─────────────
-  BRIDGE_PIPELINE: "kafka,rabbitmq,mqtt"
+  # MUST be "kafka" only. The forward chain is:
+  #   Artemis → convert → Kafka tms.scada.encrypted → relay → RabbitMQ
+  #   amq.topic/tms.scada.pas → (RMQ MQTT plugin) → MQTT tms/scada/pas → SCADA
+  # SCADA receives via the RabbitMQ MQTT plugin — there is NO separate MQTT
+  # publish. Adding "rabbitmq" or "mqtt" here re-publishes the same message to
+  # the same broker/topic, so SCADA gets 3 copies. See docs/WORKFLOW.md.
+  BRIDGE_PIPELINE: "kafka"
   BRIDGE_MONITOR_ENABLED: "true"
   BRIDGE_MONITOR_FROM_EXCHANGE: "amq.topic"
   BRIDGE_MONITOR_ROUTING_KEY: "tms.scada.pas"
