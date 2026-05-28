@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Power Segment Dashboard</title>
+<style>
+  :root{
+    --bg:#060a11; --bg2:#0a111d;
+    --panel:#0e1828; --panel-2:#12203a; --line:#1c2c46;
+    --txt:#eaf1fb; --muted:#7e90ae; --accent:#4c8dff;
+    --on:#27e07d; --off:#ff4747; --err:#ffb01f; --unk:#3a4560;
+    --rail:#243349;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:
+      radial-gradient(1400px 700px at 50% -15%, #14253f 0%, transparent 55%),
+      linear-gradient(180deg,var(--bg2),var(--bg));
+    color:var(--txt);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    display:flex;flex-direction:column;height:100vh;overflow:hidden;
+  }
+
+  /* ── Header ─────────────────────────────────────────── */
+  header{
+    display:flex;align-items:center;gap:22px;
+    padding:14px 30px;
+    background:linear-gradient(180deg,rgba(18,32,58,.85),rgba(10,19,32,.6));
+    border-bottom:1px solid var(--line);
+    backdrop-filter:blur(6px);
+    z-index:5;
+  }
+  .logo{
+    width:40px;height:40px;border-radius:11px;flex:none;
+    display:grid;place-items:center;
+    background:linear-gradient(135deg,#4c8dff,#27e07d);
+    box-shadow:0 6px 20px rgba(76,141,255,.35);
+  }
+  .logo svg{width:22px;height:22px;stroke:#06101e;stroke-width:2.4;fill:none}
+  .brand{display:flex;flex-direction:column;gap:2px}
+  .brand h1{
+    font-size:18px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;
+    background:linear-gradient(90deg,#fff,#a8c6ff);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .brand .sub{font-size:10.5px;color:var(--muted);letter-spacing:.2em;text-transform:uppercase}
+  .spacer{flex:1}
+
+  .controls{display:flex;gap:8px}
+  .controls button{
+    font:inherit;font-size:12px;font-weight:700;letter-spacing:.03em;
+    color:var(--txt);background:var(--panel-2);
+    border:1px solid var(--line);border-radius:9px;
+    padding:8px 15px;cursor:pointer;transition:.15s;
+  }
+  .controls button:hover{border-color:var(--accent);background:#173153}
+  .controls button.active{background:var(--accent);border-color:var(--accent);color:#04101f;box-shadow:0 4px 16px rgba(76,141,255,.4)}
+
+  .conn{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;
+        padding:7px 14px;border:1px solid var(--line);border-radius:9px;background:var(--panel)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--unk)}
+  .dot.live{background:var(--on);animation:pulse 2s infinite}
+  .dot.dead{background:var(--off)}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(39,224,125,.5)}
+                   70%{box-shadow:0 0 0 8px rgba(39,224,125,0)}
+                   100%{box-shadow:0 0 0 0 rgba(39,224,125,0)}}
+
+  /* ── KPI strip ──────────────────────────────────────── */
+  .kpis{display:flex;gap:14px;padding:16px 30px 4px}
+  .kpi{
+    flex:1;background:linear-gradient(180deg,var(--panel),#0a1322);
+    border:1px solid var(--line);border-radius:14px;
+    padding:13px 18px;display:flex;flex-direction:column;gap:4px;position:relative;overflow:hidden;
+  }
+  .kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--unk)}
+  .kpi.on::before {background:var(--on)}
+  .kpi.off::before{background:var(--off)}
+  .kpi.err::before{background:var(--err)}
+  .kpi.tot::before{background:var(--accent)}
+  .kpi .k{font-size:10.5px;color:var(--muted);letter-spacing:.16em;text-transform:uppercase}
+  .kpi .v{font-size:30px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+  .kpi.on  .v{color:var(--on)}  .kpi.off .v{color:var(--off)}
+  .kpi.err .v{color:var(--err)} .kpi.tot .v{color:#cfe0ff}
+  .kpi .meta{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+  /* ── Track board ────────────────────────────────────── */
+  .board{flex:1;display:flex;flex-direction:column;justify-content:space-evenly;
+         padding:14px 30px 22px;gap:6px;min-height:0}
+  .lineRow{position:relative;display:flex;align-items:center;gap:18px;height:100%;min-height:0}
+
+  .lineLabel{
+    flex:none;width:54px;text-align:center;
+    font-size:12px;font-weight:800;letter-spacing:.06em;
+    color:#06101e;padding:5px 0;border-radius:8px;z-index:3;
+  }
+
+  .track{
+    position:relative;flex:1;display:flex;align-items:center;
+    justify-content:space-between;height:100%;padding:0 6px;
+  }
+  /* the rail running through the whole line */
+  .track::before{
+    content:"";position:absolute;left:0;right:0;top:50%;height:5px;
+    transform:translateY(-50%);border-radius:3px;
+    background:var(--rail);opacity:.6;z-index:0;
+  }
+
+  .seg{position:relative;z-index:2;display:flex;flex-direction:column;
+       align-items:center;gap:7px}
+  .node{
+    width:30px;height:30px;border-radius:50%;
+    background:var(--panel-2);border:3px solid var(--unk);
+    display:grid;place-items:center;
+    transition:border-color .3s,box-shadow .3s,background .3s;
+  }
+  .node::after{content:"";width:9px;height:9px;border-radius:50%;background:var(--unk);transition:.3s}
+  .seg .name{
+    font-size:11px;font-weight:700;letter-spacing:.02em;color:#b9c8e0;
+    white-space:nowrap;transition:color .3s;
+  }
+
+  /* status styles */
+  .seg[data-st="1"] .node{border-color:var(--on);background:rgba(39,224,125,.16);box-shadow:0 0 14px rgba(39,224,125,.5)}
+  .seg[data-st="1"] .node::after{background:var(--on);box-shadow:0 0 8px var(--on)}
+  .seg[data-st="1"] .name{color:#d7f7e6}
+
+  .seg[data-st="2"] .node{border-color:var(--off);background:rgba(255,71,71,.22);box-shadow:0 0 18px rgba(255,71,71,.6)}
+  .seg[data-st="2"] .node::after{background:var(--off);box-shadow:0 0 9px var(--off)}
+  .seg[data-st="2"] .name{color:#ffd2d2}
+
+  .seg[data-st="3"] .node{border-color:var(--err);background:rgba(255,176,31,.18);
+                          box-shadow:0 0 14px rgba(255,176,31,.55);animation:blink 1s steps(2,start) infinite}
+  .seg[data-st="3"] .node::after{background:var(--err)}
+  .seg[data-st="3"] .name{color:#ffe6b8}
+  @keyframes blink{50%{opacity:.45}}
+
+  .seg[data-st="0"]{opacity:.55}
+
+  /* ── Footer / legend ────────────────────────────────── */
+  footer{
+    display:flex;align-items:center;gap:28px;
+    padding:12px 30px;background:linear-gradient(180deg,rgba(14,24,40,.6),var(--panel));
+    border-top:1px solid var(--line);font-size:12px;color:var(--muted);
+  }
+  .legend{display:flex;gap:22px}
+  .lg{display:flex;align-items:center;gap:8px;font-weight:700;color:#cdd9ec}
+  .lg .swatch{width:13px;height:13px;border-radius:50%;border:2px solid var(--unk)}
+  .lg.on  .swatch{border-color:var(--on); background:rgba(39,224,125,.2); box-shadow:0 0 8px rgba(39,224,125,.5)}
+  .lg.off .swatch{border-color:var(--off);background:rgba(255,71,71,.25); box-shadow:0 0 8px rgba(255,71,71,.5)}
+  .lg.err .swatch{border-color:var(--err);background:rgba(255,176,31,.2)}
+  .lg.unk .swatch{border-color:var(--unk)}
+  .meta-right{margin-left:auto;display:flex;gap:24px;font-variant-numeric:tabular-nums}
+  .meta-right b{color:var(--txt);font-weight:700}
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
+    </div>
+    <div class="brand">
+      <h1>Power Segment Dashboard</h1>
+      <span class="sub">SCADA · Traction Power Monitoring</span>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="controls">
+      <button data-mode="mixed"  class="active">Live (mixed)</button>
+      <button data-mode="all_on">All Energized</button>
+      <button data-mode="all_off">All Down</button>
+    </div>
+    <div class="conn"><span class="dot" id="dot"></span><span id="connTxt">connecting…</span></div>
+  </header>
+
+  <section class="kpis">
+    <div class="kpi on"> <span class="k">Energized</span><span class="v" id="cOn">0</span></div>
+    <div class="kpi off"><span class="k">No Power</span> <span class="v" id="cOff">0</span></div>
+    <div class="kpi err"><span class="k">Error</span>    <span class="v" id="cErr">0</span></div>
+    <div class="kpi tot"><span class="k">Total Segments</span><span class="v" id="cTot">0</span>
+      <span class="meta">Health Seq <b id="seq">—</b> · Updated <span id="clock">—</span></span></div>
+  </section>
+
+  <main class="board" id="board"></main>
+
+  <footer>
+    <div class="legend">
+      <span class="lg on"><span class="swatch"></span>Energized</span>
+      <span class="lg off"><span class="swatch"></span>No power</span>
+      <span class="lg err"><span class="swatch"></span>Error</span>
+      <span class="lg unk"><span class="swatch"></span>Unknown</span>
+    </div>
+    <div class="meta-right">
+      <span>Lines <b id="cLines">0</b></span>
+      <span>POWER_SCADA_TMS_INFO</span>
+    </div>
+  </footer>
+
+<script>
+const segEl = {};            // segmentID -> .seg element
+const STATUS = {0:'unknown',1:'energized',2:'no power',3:'error'};
+// per-line accent colours (cosmetic — cycles for any number of lines)
+const LINE_COLORS = ['#4c8dff','#27e07d','#ffb01f','#ff5ea0','#9b6cff',
+                     '#21d4d4','#ff8a3d','#7ee06b','#5aa9ff'];
+
+// ── Build the board from the server's track layout ──────────────
+async function buildBoard(){
+  let lines;
+  try{
+    const r = await fetch('/api/power-layout',{cache:'no-store'});
+    lines = (await r.json()).lines;
+  }catch(e){ lines = [["SEG"]]; }
+
+  const board = document.getElementById('board');
+  board.innerHTML='';
+  lines.forEach((segs,i)=>{
+    const color = LINE_COLORS[i % LINE_COLORS.length];
+    const row = document.createElement('div');
+    row.className='lineRow';
+
+    const label = document.createElement('span');
+    label.className='lineLabel';
+    label.textContent = 'L'+(i+1);
+    label.style.background = color;
+
+    const track = document.createElement('div');
+    track.className='track';
+    track.style.setProperty('--rail', color+'55');
+    segs.forEach(id=>{
+      const seg=document.createElement('div');
+      seg.className='seg';seg.dataset.st='0';
+      seg.innerHTML=`<span class="node"></span><span class="name">${id}</span>`;
+      seg.title=id;
+      track.appendChild(seg);
+      segEl[id]=seg;
+    });
+    row.appendChild(label);
+    row.appendChild(track);
+    board.appendChild(row);
+  });
+  document.getElementById('cLines').textContent = lines.length;
+}
+
+// ── Apply a power payload to the board ──────────────────────────
+function applyPayload(p){
+  if(!p) return;
+  const seq = p?.header?.healthSeq;
+  if(seq!=null) document.getElementById('seq').textContent = seq;
+  document.getElementById('clock').textContent =
+      new Date().toLocaleTimeString('en-GB');
+
+  let on=0,off=0,err=0,tot=0;
+  (p.powerSegmentsStatus||[]).forEach(s=>{
+    const el = segEl[s.segmentID];
+    tot++;
+    if(s.powerStatus===1)on++; else if(s.powerStatus===2)off++; else if(s.powerStatus===3)err++;
+    if(el){
+      el.dataset.st = s.powerStatus;
+      el.title = `${s.segmentID} — ${STATUS[s.powerStatus]||s.powerStatus}`;
+    }
+  });
+  document.getElementById('cOn').textContent  = on;
+  document.getElementById('cOff').textContent = off;
+  document.getElementById('cErr').textContent = err;
+  document.getElementById('cTot').textContent = tot;
+}
+
+// ── Live feed via SSE ───────────────────────────────────────────
+function connect(){
+  const es = new EventSource('/api/stream');
+  const dot=document.getElementById('dot'), txt=document.getElementById('connTxt');
+  es.onopen = ()=>{ dot.className='dot live'; txt.textContent='live'; };
+  es.onmessage = e=>{
+    let m; try{ m=JSON.parse(e.data); }catch(_){ return; }
+    if(m.type==='power') applyPayload(m.payload);
+  };
+  es.onerror = ()=>{ dot.className='dot dead'; txt.textContent='reconnecting…'; };
+}
+
+// ── Mode buttons (drive the publisher) ──────────────────────────
+function wireControls(){
+  document.querySelectorAll('.controls button').forEach(b=>{
+    b.onclick = async ()=>{
+      document.querySelectorAll('.controls button').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      await fetch('/api/power-scada/config',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({enabled:true,interval_s:5,mode:b.dataset.mode})
+      }).catch(()=>{});
+      fetch('/api/power-scada/publish',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({mode:b.dataset.mode})
+      }).catch(()=>{});
+    };
+  });
+}
+
+// ── Boot ────────────────────────────────────────────────────────
+const SNAPSHOT = new URLSearchParams(location.search).has('snapshot');
+(async()=>{
+  await buildBoard();
+  wireControls();
+  try{ applyPayload(await (await fetch('/api/power-scada/last',{cache:'no-store'})).json()); }catch(_){}
+  if(SNAPSHOT){
+    document.getElementById('dot').className='dot live';
+    document.getElementById('connTxt').textContent='snapshot';
+    return;
+  }
+  connect();
+  fetch('/api/power-scada/config',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({enabled:true,interval_s:5,mode:'mixed'})
+  }).catch(()=>{});
+})();
+</script>
+</body>
+</html>

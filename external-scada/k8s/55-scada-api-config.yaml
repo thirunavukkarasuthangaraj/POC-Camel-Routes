@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scada-api-config
+  namespace: scada
+data:
+  # ═══════════════════════════════════════════════════════════════════
+  # All non-secret env for scada-api. Edit here, apply, restart pod.
+  # NO docker build, NO image load.
+  #
+  #   kubectl -n scada apply -f external-scada/k8s/55-scada-api-config.yaml
+  #   kubectl -n scada rollout restart deploy/scada-api
+  # ═══════════════════════════════════════════════════════════════════
+
+  # ── MQTT broker (RabbitMQ MQTT plugin) ─────────────────────────────
+  MQTT_HOST: "rabbitmq-internal"
+  MQTT_PORT: "1883"
+
+  # ── Topics (where scada-api subscribes/publishes) ──────────────────
+  MQTT_TOPIC_IN:  "tms/scada/pas"          # encrypted forward from bridge
+  MQTT_TOPIC_OUT: "scada/tms/alarms"       # plain RSAE reverse to bridge
+
+  # ── Identity ───────────────────────────────────────────────────────
+  SCADA_CREATOR_ID: "ScateX"
+
+  # ── Power-SCADA → TMS Artemis (direct publish) ─────────────────────
+  ARTEMIS_HOST:  "10.4.1.28"
+  ARTEMIS_PORT:  "61616"
+  ARTEMIS_TOPIC: "POWER_SCADA_TMS_INFO"
+
+  # ── Bridge URL (for /api/publish/tms passthrough) ──────────────────
+  BRIDGE_URL: "http://pas-scada-bridge.pinkline.svc.cluster.local:8085"
+
+  # ── Auto-send: SILENT BY DEFAULT (per project convention) ──────────
+  # A fresh pod publishes NOTHING until you start it from the dashboard.
+  # Flip to "true"/"false" here and restart to change the default.
+  AUTO_ALARM_ENABLED:      "false"
+  KEEPALIVE_PAUSED:        "true"
+  SEND_ALL_ALARMS_ENABLED: "false"
+  GET_ALL_ALARMS_ENABLED:  "false"
+
+  # ── Timer intervals (seconds) ──────────────────────────────────────
+  KEEPALIVE_SECONDS:        "30"
+  AUTO_ALARM_SECONDS:       "10"
+  SEND_ALL_ALARMS_SECONDS:  "60"
+  GET_ALL_ALARMS_SECONDS:   "120"
+
+  # ── Outbound encryption (SCADA → TMS) ──────────────────────────────
+  SCADA_OUTBOUND_ENCRYPT: "false"

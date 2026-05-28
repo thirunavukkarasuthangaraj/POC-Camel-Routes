@@ -48,7 +48,7 @@ import socket
 import threading
 import time
 from collections import deque
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from queue import Queue, Empty
 
 import paho.mqtt.client as mqtt
@@ -81,16 +81,24 @@ AES_KEY = base64.b64decode(AES_KEY_B64) if AES_KEY_B64 else None
 # Runtime-mutable config — EVERY value below is editable live via
 # POST /api/config and takes effect immediately. Nothing is a restart
 # requirement. Dashboard reflects changes via SSE.
+def _envbool(key: str, default: str) -> bool:
+    return os.getenv(key, default).strip().lower() == "true"
+
 runtime = {
     # ── Timer intervals ─────────────────────────
-    "keepalive_seconds":        30,
-    "auto_alarm_seconds":       10,     # 0 = disabled
-    "auto_alarm_enabled":       True,
-    "keepalive_paused":         False,
-    "send_all_alarms_seconds":  60,     # 0 = disabled; auto-broadcast all alarms
-    "send_all_alarms_enabled":  True,
-    "get_all_alarms_seconds":   120,    # 0 = disabled; proactively ask TMS for all alarms
-    "get_all_alarms_enabled":   True,
+    # SILENT BY DEFAULT: a fresh deploy publishes NOTHING until enabled,
+    # either from the dashboard ("Start"/"Start all") or via env overrides.
+    # To auto-start publishing on boot, set the *_ENABLED env vars to "true"
+    # (and KEEPALIVE_PAUSED to "false"). Dashboard changes take effect live
+    # but do NOT persist across restarts — the env vars are the durable knob.
+    "keepalive_seconds":        int(os.getenv("KEEPALIVE_SECONDS", "30")),
+    "auto_alarm_seconds":       int(os.getenv("AUTO_ALARM_SECONDS", "10")),     # 0 = disabled
+    "auto_alarm_enabled":       _envbool("AUTO_ALARM_ENABLED", "false"),
+    "keepalive_paused":         _envbool("KEEPALIVE_PAUSED", "true"),
+    "send_all_alarms_seconds":  int(os.getenv("SEND_ALL_ALARMS_SECONDS", "60")),
+    "send_all_alarms_enabled":  _envbool("SEND_ALL_ALARMS_ENABLED", "false"),
+    "get_all_alarms_seconds":   int(os.getenv("GET_ALL_ALARMS_SECONDS", "120")),
+    "get_all_alarms_enabled":   _envbool("GET_ALL_ALARMS_ENABLED", "false"),
 
     # ── Identity & topics (mutable) ─────────────
     "creator_id":               CREATOR_ID,
@@ -277,8 +285,11 @@ def on_message(client, userdata, msg):
                 str(alarm.get("Timestamp", "")),
             )
 
-        # If TMS just sent us a GetAllAlarms, respond with SendAllAlarms
-        if isinstance(decoded, dict) and decoded.get("Type") == "GetAllAlarms":
+        # If TMS just sent us a GetAllAlarms, respond with SendAllAlarms —
+        # but only when SendAllAlarms is enabled, so an "off" SCADA stays
+        # silent even when TMS keeps polling with GetAllAlarms.
+        if (isinstance(decoded, dict) and decoded.get("Type") == "GetAllAlarms"
+                and runtime["send_all_alarms_enabled"]):
             send_all_alarms()
     except Exception as e:
         entry["error"]      = str(e)
@@ -480,6 +491,14 @@ def index():
     return resp
 
 
+@app.route("/config")
+def config_page():
+    """Dedicated config & scenario editor screen — separate from /."""
+    resp = send_from_directory("static", "config.html")
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return resp
+
+
 @app.route("/api/status")
 def api_status():
     return jsonify({
@@ -537,23 +556,42 @@ def _tms_xml(topic: str) -> str:
     arrival   = (seconds_today + 60) % 86400
     departure = arrival + 60
 
-    # ── TMS.PISInfo: Passenger Info time table (ATRTimeTableMsg.V3) ──
+    # ── TMS.PISInfo: Passenger Info platform/train info (rcs.e2k.ctc.train.pas.V1) ──
     if topic == "TMS.PISInfo":
+        station_id   = random.randint(10, 25)
+        platform_id  = f"PL{station_id}{random.randint(0, 99):02d}"
+        train_guid   = f"trafficscheduler-{random.randint(100000000, 999999999):09d}-" \
+                       f"{random.randint(1000, 9999)}-{random.randint(1000, 9999)}-" \
+                       f"{random.randint(100000000000, 999999999999)}"
+        train_name   = f"{random.randint(1, 99):02d}"
+        arrival_ts   = (now).strftime("%Y%m%dT%H%M%S")
+        departure_ts = (now + timedelta(seconds=20)).strftime("%Y%m%dT%H%M%S")
+        dest_id      = random.randint(2000, 2999)
         return (
-            f'<ATRTimeTable>'
-            f'<dateTime>{ts_compact}</dateTime>'
+            f'<rcsMsg>'
+            f'<hdr>'
+            f'<schema>rcs.e2k.ctc.train.pas.V1</schema>'
+            f'<sender>RCS.E2K.PIS</sender>'
+            f'</hdr>'
+            f'<data>'
+            f'<PlatformInfos>'
+            f'<PlatformInfo platform="{platform_id}">'
+            f'<StationId>{station_id}</StationId>'
+            f'<NextTrainApproacing>no</NextTrainApproacing>'
             f'<Trains>'
-            f'<Tg>'
-            f'<Id>{trip_no}</Id>'
-            f'<TTGUID>{tt_guid}</TTGUID>'
-            f'<TripNo>{trip_no}</TripNo>'
-            f'<CTD lpid="{line_id}" tn="{trip_no}"/>'
-            f'<TmsPTI trguid="{tt_guid}" typeid="1" ttypeid="2"/>'
-            f'<Evts F="3" Id="{platform}" As="{arrival}" Ds="{departure}"/>'
-            f'<Evts F="3" Id="{platform + 1}" As="{arrival + 120}" Ds="{departure + 120}"/>'
-            f'</Tg>'
+            f'<Train idx="0" id="0" GUID="{train_guid}" name="{train_name}" tripno="{trip_no}">'
+            f'<WillStop>yes</WillStop>'
+            f'<AtStation>no</AtStation>'
+            f'<LastForToday>no</LastForToday>'
+            f'<ArrivalTime>{arrival_ts}</ArrivalTime>'
+            f'<DepartureTime>{departure_ts}</DepartureTime>'
+            f'<DestinationId>{dest_id}</DestinationId>'
+            f'</Train>'
             f'</Trains>'
-            f'</ATRTimeTable>')
+            f'</PlatformInfo>'
+            f'</PlatformInfos>'
+            f'</data>'
+            f'</rcsMsg>')
 
     # ── RCS.E2K.TMS.TrafficReportClient: alternates Arrival / Departure ──
     if topic == "RCS.E2K.TMS.TrafficReportClient":
@@ -668,6 +706,75 @@ def api_tms_publish_config():
 @app.route("/api/tms-publish/state")
 def api_tms_publish_state():
     return jsonify({**tms_pub, "topics": TMS_TOPICS, "bridge_url": BRIDGE_URL})
+
+
+@app.route("/api/tms-publish/template")
+def api_tms_publish_template():
+    """Return an auto-generated XML template for a topic — used by the config
+    editor to pre-fill the textarea, then user edits + sends scenarios."""
+    topic = request.args.get("topic", tms_pub["topic"])
+    if topic not in TMS_TOPICS:
+        return jsonify({"ok": False, "error": "unknown topic", "allowed": TMS_TOPICS}), 400
+    try:
+        return jsonify({"ok": True, "topic": topic, "xml": _tms_xml(topic)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/scada-envelope/template")
+def api_scada_envelope_template():
+    """Auto-generated RSAE envelope template for the config editor."""
+    kind = request.args.get("kind", "UpdateAlarm")
+    creator = runtime["creator_id"]
+    ts = now_rsae()
+    if kind == "UpdateAlarm":
+        env = {"CreatorId": creator, "Type": "UpdateAlarm", "Timestamp": ts,
+               "Alarm": {"Timestamp": ts, "Id": "ESC_ROL_1_23", "State": "1"}}
+    elif kind == "KeepAlive":
+        env = {"CreatorId": creator, "Type": "KeepAlive", "Timestamp": ts}
+    elif kind == "SendAllAlarms":
+        env = {"CreatorId": creator, "Type": "SendAllAlarms", "Timestamp": ts,
+               "Alarms": list(alarm_db.values())}
+    elif kind == "GetAllAlarms":
+        env = {"CreatorId": creator, "Type": "GetAllAlarms", "Timestamp": ts}
+    else:
+        return jsonify({"ok": False, "error": "unknown kind"}), 400
+    return jsonify({"ok": True, "kind": kind, "envelope": env})
+
+
+@app.route("/api/scada-publish-raw", methods=["POST"])
+def api_scada_publish_raw():
+    """Publish a raw RSAE envelope (JSON) to topic_out — for scenario testing.
+    Body: {"kind": "UpdateAlarm|KeepAlive|SendAllAlarms|GetAllAlarms",
+           "envelope": {...}}
+    Bypasses auto-building so the user can craft arbitrary payloads."""
+    body = request.get_json(silent=True) or {}
+    kind     = body.get("kind", "UpdateAlarm")
+    envelope = body.get("envelope")
+    if not isinstance(envelope, dict):
+        return jsonify({"ok": False, "error": "envelope must be a JSON object"}), 400
+    try:
+        ok = publish(runtime["topic_out"], envelope, kind)
+        if ok:
+            if   kind == "UpdateAlarm":   stats["sent_alarm"]  += 1
+            elif kind == "KeepAlive":     stats["sent_ka"]     += 1
+            elif kind == "SendAllAlarms": stats["sent_all"]    += 1
+            elif kind == "GetAllAlarms":  stats["sent_get_all"] += 1
+        return jsonify({"ok": ok, "kind": kind, "topic": runtime["topic_out"]})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/power-scada/template")
+def api_power_scada_template():
+    """Auto-generated power-segment JSON template for the config editor."""
+    mode = request.args.get("mode", power_scada_pub["mode"])
+    if mode not in POWER_MODES:
+        return jsonify({"ok": False, "error": "unknown mode", "allowed": list(POWER_MODES)}), 400
+    try:
+        return jsonify({"ok": True, "mode": mode, "payload": _power_scada_payload(mode)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/api/received")
@@ -831,17 +938,21 @@ ARTEMIS_USER  = os.getenv("ARTEMIS_USER",  "admin")
 ARTEMIS_PASS  = os.getenv("ARTEMIS_PASS",  "admin")
 ARTEMIS_TOPIC = os.getenv("ARTEMIS_TOPIC", "POWER_SCADA_TMS_INFO")
 
-POWER_SEGMENT_IDS = [
-    "seg1111", "seg321", "seg1345", "seg222",
-    "r2a", "r2b", "r2c", "r2d", "r2e",
-    "r3a", "r3b", "r3c", "r3d", "r3e",
-    "r4a", "r4b", "r4c", "r4d", "r4e", "r4f",
-    "r5a", "r5b", "r5c", "r5d", "r5e",
-    "r6a", "r6b", "r6c", "r6d", "r6e",
-    "r7a", "r7b", "r7c", "r7d", "r7e",
-    "r8a", "r8b", "r8c", "r8d", "r8e",
-    "r9a", "r9b", "r9c", "r9d", "r9e",
+# Track layout for the visual dashboard — each row is one line, each entry a
+# power segment. Names mirror the client's reference schematic so the web
+# dashboard (/power) renders the same topology the demo expects.
+POWER_LINES = [
+    ["P.CHA", "BAMBU", "CHAM",  "P.CAS"],
+    ["VALDE", "TETUA", "N04",   "C.C.",  "N01"],
+    ["R.ROS", "IGLES", "BILBA", "TRIBU", "G.VIA"],
+    ["SOL",   "T.MOL", "A.MAR", "ATOCH", "A.REN", "M.PEL"],
+    ["PACIF", "VALLE", "N.NUM", "PORTA", "B.AIR"],
+    ["A.ARE", "M.HER", "S.GUA", "V.VAL", "CONGO"],
+    ["PROG",  "N26",   "GAVIA", "SUERT", "CARRO"],
+    ["E.A.1", "N24",   "N25",   "C12",   "AS"],
+    ["N29",   "N27",   "N22",   "VA",    "N21"],
 ]
+POWER_SEGMENT_IDS = [sid for line in POWER_LINES for sid in line]
 POWER_MODES = ("random", "all_on", "all_off", "mixed")
 
 power_scada_pub = {
@@ -853,6 +964,9 @@ power_scada_pub = {
     "last_at":    None,
     "last_error": None,
 }
+
+# Latest power payload generated — served to /power for instant first paint.
+_power_last = {"payload": None}
 
 
 def _power_scada_payload(mode: str) -> dict:
@@ -947,8 +1061,14 @@ def _power_scada_record_err(e: Exception):
 def _power_scada_loop():
     while True:
         if power_scada_pub["enabled"]:
+            payload = _power_scada_payload(power_scada_pub["mode"])
+            # Always feed the live web dashboard (/power), independent of
+            # whether the Artemis STOMP publish succeeds — so the visual
+            # demo keeps running even if the broker is unreachable.
+            _power_last["payload"] = payload
+            broadcast_sse("power", payload)
             try:
-                _power_scada_publish_json(_power_scada_payload(power_scada_pub["mode"]))
+                _power_scada_publish_json(payload)
                 _power_scada_record_ok()
             except Exception as e:
                 _power_scada_record_err(e)
@@ -966,13 +1086,17 @@ def api_power_scada_publish_now():
     if mode not in POWER_MODES:
         return jsonify({"ok": False, "error": "unknown mode", "allowed": list(POWER_MODES)}), 400
     payload = body.get("payload") or _power_scada_payload(mode)
+    _power_last["payload"] = payload
+    broadcast_sse("power", payload)
     try:
         _power_scada_publish_json(payload)
         _power_scada_record_ok()
-        return jsonify({"ok": True, "sent": power_scada_pub["sent"], "mode": mode})
+        return jsonify({"ok": True, "sent": power_scada_pub["sent"], "mode": mode, "payload": payload})
     except Exception as e:
         _power_scada_record_err(e)
-        return jsonify({"ok": False, "error": str(e)}), 502
+        # Artemis may be unreachable, but the web dashboard still gets the
+        # payload in the response + via SSE — so /power stays live.
+        return jsonify({"ok": False, "error": str(e), "payload": payload}), 200
 
 
 @app.route("/api/power-scada/config", methods=["POST"])
@@ -1000,6 +1124,31 @@ def api_power_scada_state():
         "modes":   list(POWER_MODES),
         "segments_total": len(POWER_SEGMENT_IDS),
     })
+
+
+@app.route("/api/power-layout")
+def api_power_layout():
+    """Track topology for the visual Power dashboard (/power)."""
+    return jsonify({"lines": POWER_LINES})
+
+
+@app.route("/api/power-scada/last")
+def api_power_scada_last():
+    """Most recent power payload — lets /power paint colours instantly on
+    load instead of waiting for the next SSE tick."""
+    return jsonify(_power_last["payload"] or _power_scada_payload(power_scada_pub["mode"]))
+
+
+@app.route("/power")
+def power_dashboard():
+    """Clean, presentation-grade Power Segment track view. Renders the
+    POWER_LINES topology and colours each segment's rails by powerStatus,
+    fed live from the SSE 'power' events."""
+    resp = send_from_directory("static", "power.html")
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 if __name__ == "__main__":

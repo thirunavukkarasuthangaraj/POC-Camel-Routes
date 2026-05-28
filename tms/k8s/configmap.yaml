@@ -12,37 +12,38 @@ data:
 
   # ── ActiveMQ Artemis (IN-CLUSTER: same namespace, Service DNS) ─────
   # camel.component.activemq.broker-url = tcp://${ARTEMIS_HOST}:${ARTEMIS_PORT}
-  ARTEMIS_HOST: "artemis-service"
+  ARTEMIS_HOST: "10.4.1.28"
   ARTEMIS_PORT: "61616"
 
   # ── Kafka (IN-CLUSTER: same namespace, Service DNS) ────────────────
   # kafka.brokers = ${KAFKA_HOST}:${KAFKA_PORT}
-  KAFKA_HOST: "kafka-service"
+  KAFKA_HOST: "kafka-cluster-kafka-bootstrap.kafka.svc.cluster.local"
   KAFKA_PORT: "9092"
 
   # ── RabbitMQ (EXTERNAL VM / SCADA cluster — cross-VM reach) ────────
   # spring.rabbitmq.host = ${RABBITMQ_HOST}
   # spring.rabbitmq.port = ${RABBITMQ_PORT}
-  RABBITMQ_HOST: "10.4.0.25"
-  RABBITMQ_PORT: "5673"             # host-mapped port on SCADA VM
+  RABBITMQ_HOST: "rabbitmq-internal.scada.svc.cluster.local"
+  RABBITMQ_PORT: "5672"             # host-mapped port on SCADA VM
 
   # ── MQTT (same external RabbitMQ broker, MQTT plugin) ──────────────
   # bridge.mqtt.broker-url = tcp://${MQTT_HOST}:${MQTT_PORT}
-  MQTT_HOST: "10.4.0.25"
-  MQTT_PORT: "1884"                 # host-mapped MQTT port on SCADA VM
+  MQTT_HOST: "rabbitmq-internal.scada.svc.cluster.local"
+  MQTT_PORT: "1883"                 # host-mapped MQTT port on SCADA VM
 
   # ── Bridge pipeline & behaviour (configurable per env) ─────────────
-  # MUST be "kafka" only. The forward chain is:
-  #   Artemis → convert → Kafka tms.scada.encrypted → relay → RabbitMQ
-  #   amq.topic/tms.scada.pas → (RMQ MQTT plugin) → MQTT tms/scada/pas → SCADA
-  # SCADA receives via the RabbitMQ MQTT plugin — there is NO separate MQTT
-  # publish. Adding "rabbitmq" or "mqtt" here re-publishes the same message to
-  # the same broker/topic, so SCADA gets 3 copies. See docs/WORKFLOW.md.
   BRIDGE_PIPELINE: "kafka"
   BRIDGE_MONITOR_ENABLED: "true"
   BRIDGE_MONITOR_FROM_EXCHANGE: "amq.topic"
   BRIDGE_MONITOR_ROUTING_KEY: "tms.scada.pas"
   BRIDGE_MONITOR_QUEUE: "scada.monitor.queue"
+
+  # ── Topics / sink names live in configmap-appprops.yaml ────────────
+  # All topic config (artemis listen list, kafka topic names, rabbitmq
+  # routing keys, reverse sinks) is in configmap-appprops.yaml mounted
+  # as /app/config/application.properties. Edit that file, apply, restart.
+  # Do NOT set BRIDGE_ARTEMISTOPICS here — env vars override the mounted
+  # file and create a confusing dual source of truth.
 
   # ── TLS (uncomment when DevOps mounts the truststore Secret) ───────
   # TLS_TRUSTSTORE_PATH: "/etc/ssl/bridge/truststore.jks"

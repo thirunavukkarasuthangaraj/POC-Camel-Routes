@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SCADA — Config & Save</title>
+<style>
+  :root{
+    --bg:#0a0e16; --panel:#10151f; --border:#1d2533; --muted:#7c869b;
+    --dim:#5a6478; --text:#cfd6e4; --accent:#5fb1ff; --ok:#4ade80; --err:#f87171;
+    --ua:#fb923c; --ka:#22d3ee; --sa:#a78bfa; --ga:#fde047;
+    --mono:"JetBrains Mono","Fira Code",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:13px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;}
+  a{color:var(--accent);text-decoration:none}
+  code{font-family:var(--mono);background:#0f1622;padding:1px 5px;border-radius:3px;color:#aab3c5;font-size:11px}
+
+  .topnav{display:flex;align-items:center;gap:14px;padding:10px 16px;background:#0d121b;border-bottom:1px solid var(--border);}
+  .topnav h1{margin:0;font-size:16px;font-weight:600;letter-spacing:.3px;}
+  .tabs{display:flex;gap:4px;margin-left:auto;}
+  .tab{padding:6px 14px;border-radius:6px;background:#0f1622;color:var(--muted);font-size:12px;cursor:pointer;border:1px solid var(--border);}
+  .tab.active{background:var(--accent);color:#04101e;font-weight:600;border-color:var(--accent);}
+  .tab:hover{color:var(--text);}
+
+  .wrap{max-width:1200px;margin:24px auto;padding:0 16px;}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  @media (max-width:900px){.grid{grid-template-columns:1fr;}}
+
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px;}
+  .card-title{font-weight:600;font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+  .card-title small{color:var(--muted);font-weight:400;font-size:11px;}
+
+  label{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;}
+  input[type=text],input[type=number],select,textarea{
+    width:100%;padding:6px 8px;background:#0a0e16;border:1px solid var(--border);color:var(--text);
+    border-radius:4px;font-size:12px;font-family:inherit;
+  }
+  textarea{font-family:var(--mono);font-size:11px;resize:vertical;}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);}
+
+  .row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;}
+  .row > div{flex:1;min-width:140px;}
+
+  .timer-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+  @media (max-width:700px){.timer-grid{grid-template-columns:repeat(2,1fr);}}
+  .timer-cell{background:#0a0e16;border:1px solid var(--border);border-radius:6px;padding:8px;}
+  .timer-cell-label{font-size:11px;font-weight:600;margin-bottom:6px;}
+  .timer-cell .row{gap:4px;}
+  .timer-cell input[type=number]{width:60px;}
+  .timer-en{font-size:10px;color:var(--muted);margin-top:6px;display:flex;align-items:center;gap:4px;}
+
+  .btn{padding:6px 14px;border:0;border-radius:4px;cursor:pointer;font-size:12px;font-weight:500;font-family:inherit;}
+  .btn-a{background:var(--accent);color:#04101e;}
+  .btn-g{background:#1f2937;color:var(--text);border:1px solid var(--border);}
+  .btn-err{background:var(--err);color:#04101e;}
+  .btn:hover{filter:brightness(1.1);}
+
+  .save-bar{position:sticky;bottom:0;background:linear-gradient(0deg,var(--bg) 60%,transparent);padding:14px 0;display:flex;gap:10px;justify-content:flex-end;align-items:center;border-top:1px solid var(--border);margin-top:10px;}
+  .save-status{color:var(--muted);font-size:11px;}
+  .save-status.ok{color:var(--ok);}
+  .save-status.err{color:var(--err);}
+
+  .help{font-size:11px;color:var(--muted);margin-top:4px;}
+  .badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-family:var(--mono);background:#0f1622;color:#aab3c5;}
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <h1>⚙ SCADA — Config & Save</h1>
+  <div class="tabs">
+    <a href="/" class="tab">🚆 Train</a>
+    <span class="tab active">⚙ Config</span>
+    <a href="/power" class="tab">⚡ Power</a>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- ── Identity & Topics ──────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">Identity & Topics <small>who SCADA is and which MQTT topics it uses</small></div>
+    <div class="row">
+      <div>
+        <label>Creator ID</label>
+        <input type="text" id="cfg-creator" placeholder="ScateX">
+      </div>
+      <div>
+        <label>Topic IN (subscribe — TMS → SCADA)</label>
+        <input type="text" id="cfg-topic-in" placeholder="tms/scada/pas">
+      </div>
+      <div>
+        <label>Topic OUT (publish — SCADA → TMS)</label>
+        <input type="text" id="cfg-topic-out" placeholder="scada/tms/alarms">
+      </div>
+    </div>
+    <div class="help">These change runtime values only. To persist across restarts, edit <code>55-scada-api-config.yaml</code> and apply.</div>
+  </div>
+
+  <!-- ── Auto-send Timers ───────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">Auto-send Timers <small>seconds · 0 disables · uncheck to pause</small></div>
+    <div class="timer-grid">
+      <div class="timer-cell">
+        <div class="timer-cell-label" style="color:var(--ua);">UpdateAlarm</div>
+        <div class="row"><input type="number" id="cfg-aa" min="0" max="3600" value="10"><span>s</span></div>
+        <div class="timer-en"><input type="checkbox" id="cfg-aa-en"> enabled</div>
+      </div>
+      <div class="timer-cell">
+        <div class="timer-cell-label" style="color:var(--ka);">KeepAlive</div>
+        <div class="row"><input type="number" id="cfg-ka" min="1" max="3600" value="30"><span>s</span></div>
+        <div class="timer-en"><input type="checkbox" id="cfg-ka-paused"> paused</div>
+      </div>
+      <div class="timer-cell">
+        <div class="timer-cell-label" style="color:var(--sa);">SendAllAlarms</div>
+        <div class="row"><input type="number" id="cfg-sa" min="0" max="3600" value="60"><span>s</span></div>
+        <div class="timer-en"><input type="checkbox" id="cfg-sa-en"> enabled</div>
+      </div>
+      <div class="timer-cell">
+        <div class="timer-cell-label" style="color:var(--ga);">GetAllAlarms</div>
+        <div class="row"><input type="number" id="cfg-ga" min="0" max="3600" value="120"><span>s</span></div>
+        <div class="timer-en"><input type="checkbox" id="cfg-ga-en"> enabled</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Equipment list ─────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">Equipment List <small>one ID per line · used by Manual Publish + SendAll</small></div>
+    <textarea id="cfg-equipment" rows="8" placeholder="ESC_ROL_1_23
+DOOR_PLT_2_3
+..."></textarea>
+  </div>
+
+  <!-- ── Scenario library (localStorage) ────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">Scenario Library <small>save current editor contents as a named scenario · stored in browser</small></div>
+    <div class="row" style="margin-bottom:8px;">
+      <div style="flex:2;">
+        <label>New scenario name</label>
+        <input type="text" id="sc-name" placeholder="e.g. PIS train arriving platform 3">
+      </div>
+      <div>
+        <label>Kind to save</label>
+        <select id="sc-kind">
+          <option value="tms">TMS XML</option>
+          <option value="pwr">Power JSON</option>
+          <option value="scada">SCADA Envelope</option>
+        </select>
+      </div>
+      <button class="btn btn-a" onclick="saveScenario()">💾 Save current editor</button>
+    </div>
+    <div id="sc-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px;"></div>
+    <div class="help">Scenarios are saved in this browser only. Click a card to load it into the matching editor below. Send button publishes it.</div>
+  </div>
+
+  <!-- ── Payload template editor ────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">Custom Payload Editor <small>load template / scenario, edit, send to Artemis / MQTT</small></div>
+
+    <div class="grid">
+
+      <!-- TMS XML editor -->
+      <div>
+        <label>TMS Publisher · Topic</label>
+        <select id="ed-tms-topic">
+          <option>TMS.PISInfo</option>
+          <option>RCS.E2K.TMS.TrafficReportClient</option>
+          <option>TSInfo</option>
+          <option>RCS.E2K.TMS.RouteInfo</option>
+        </select>
+        <label style="margin-top:8px;">XML payload</label>
+        <textarea id="ed-tms-xml" rows="10" placeholder="<TMSPISInfo>...</TMSPISInfo>"></textarea>
+        <div class="row" style="margin-top:6px;">
+          <button class="btn btn-g" onclick="loadTmsTpl()">Load template</button>
+          <button class="btn btn-a" onclick="sendTmsXml()">Send XML</button>
+          <span class="save-status" id="ed-tms-status"></span>
+        </div>
+      </div>
+
+      <!-- Power JSON editor -->
+      <div>
+        <label>Power SCADA · Mode</label>
+        <select id="ed-pwr-mode">
+          <option value="mixed">mixed</option>
+          <option value="random">random</option>
+          <option value="all_on">all_on</option>
+          <option value="all_off">all_off</option>
+        </select>
+        <label style="margin-top:8px;">JSON payload</label>
+        <textarea id="ed-pwr-json" rows="10" placeholder='{"timestamp":"...","segments":[...]}'></textarea>
+        <div class="row" style="margin-top:6px;">
+          <button class="btn btn-g" onclick="loadPwrTpl()">Load template</button>
+          <button class="btn btn-a" onclick="sendPwrJson()">Send JSON</button>
+          <span class="save-status" id="ed-pwr-status"></span>
+        </div>
+      </div>
+
+      <!-- SCADA → TMS envelope editor -->
+      <div style="grid-column:1/-1;">
+        <label>SCADA → TMS · Envelope type</label>
+        <select id="ed-scada-kind" style="max-width:240px;">
+          <option>UpdateAlarm</option>
+          <option>KeepAlive</option>
+          <option>SendAllAlarms</option>
+          <option>GetAllAlarms</option>
+        </select>
+        <label style="margin-top:8px;">RSAE envelope JSON</label>
+        <textarea id="ed-scada-json" rows="10" placeholder='{"CreatorId":"ScateX","Type":"UpdateAlarm",...}'></textarea>
+        <div class="row" style="margin-top:6px;">
+          <button class="btn btn-g" onclick="loadScadaTpl()">Load template</button>
+          <button class="btn btn-a" onclick="sendScadaJson()">Send Envelope</button>
+          <span class="save-status" id="ed-scada-status"></span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Save bar ───────────────────────────────────────────────────── -->
+  <div class="save-bar">
+    <span class="save-status" id="save-status"></span>
+    <button class="btn btn-g" onclick="reload()">Reload from server</button>
+    <button class="btn btn-a" onclick="saveAll()">💾 Save All</button>
+  </div>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const ct = () => ({'Content-Type':'application/json'});
+
+function setStatus(elId, msg, kind){
+  const el = $(elId);
+  el.className = 'save-status' + (kind ? ' ' + kind : '');
+  el.textContent = msg;
+}
+
+// ── Load current config from server ────────────────────────────────
+async function reload(){
+  try {
+    const s = await (await fetch('/api/status')).json();
+    const r = s.runtime || {};
+    $('cfg-creator').value   = r.creator_id || '';
+    $('cfg-topic-in').value  = r.topic_in   || '';
+    $('cfg-topic-out').value = r.topic_out  || '';
+    $('cfg-aa').value        = r.auto_alarm_seconds ?? 10;
+    $('cfg-aa-en').checked   = !!r.auto_alarm_enabled;
+    $('cfg-ka').value        = r.keepalive_seconds ?? 30;
+    $('cfg-ka-paused').checked = !!r.keepalive_paused;
+    $('cfg-sa').value        = r.send_all_alarms_seconds ?? 60;
+    $('cfg-sa-en').checked   = !!r.send_all_alarms_enabled;
+    $('cfg-ga').value        = r.get_all_alarms_seconds ?? 120;
+    $('cfg-ga-en').checked   = !!r.get_all_alarms_enabled;
+    $('cfg-equipment').value = (r.equipment || []).join('\n');
+    setStatus('save-status', `loaded · ${new Date().toLocaleTimeString()}`, 'ok');
+  } catch (e) {
+    setStatus('save-status', `load failed: ${e}`, 'err');
+  }
+}
+
+// ── Save everything to server ──────────────────────────────────────
+async function saveAll(){
+  const body = {
+    creator_id:               $('cfg-creator').value.trim(),
+    topic_in:                 $('cfg-topic-in').value.trim(),
+    topic_out:                $('cfg-topic-out').value.trim(),
+    auto_alarm_seconds:       parseInt($('cfg-aa').value, 10),
+    auto_alarm_enabled:       $('cfg-aa-en').checked,
+    keepalive_seconds:        parseInt($('cfg-ka').value, 10),
+    keepalive_paused:         $('cfg-ka-paused').checked,
+    send_all_alarms_seconds:  parseInt($('cfg-sa').value, 10),
+    send_all_alarms_enabled:  $('cfg-sa-en').checked,
+    get_all_alarms_seconds:   parseInt($('cfg-ga').value, 10),
+    get_all_alarms_enabled:   $('cfg-ga-en').checked,
+    equipment:                $('cfg-equipment').value.split('\n').map(s => s.trim()).filter(Boolean),
+  };
+  try {
+    const r = await fetch('/api/config', {method:'POST', headers:ct(), body:JSON.stringify(body)});
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    setStatus('save-status', `saved · ${new Date().toLocaleTimeString()}`, 'ok');
+  } catch (e) {
+    setStatus('save-status', `save failed: ${e}`, 'err');
+  }
+}
+
+// ── Payload editor: TMS XML ────────────────────────────────────────
+async function loadTmsTpl(){
+  const topic = $('ed-tms-topic').value;
+  try {
+    const r = await fetch(`/api/tms-publish/template?topic=${encodeURIComponent(topic)}`);
+    const j = await r.json();
+    $('ed-tms-xml').value = j.xml || `<!-- ${j.error || 'no template'} -->`;
+    setStatus('ed-tms-status', 'template loaded', 'ok');
+  } catch (e) { setStatus('ed-tms-status', e.message, 'err'); }
+}
+async function sendTmsXml(){
+  const topic = $('ed-tms-topic').value;
+  const xml   = $('ed-tms-xml').value.trim();
+  if (!xml) return setStatus('ed-tms-status', 'XML empty', 'err');
+  const r = await fetch('/api/tms-publish', {method:'POST', headers:ct(), body:JSON.stringify({topic, xml})});
+  const j = await r.json().catch(()=>({}));
+  setStatus('ed-tms-status', j.ok ? `sent → ${topic}` : `error: ${j.error}`, j.ok ? 'ok' : 'err');
+}
+
+// ── Payload editor: Power JSON ─────────────────────────────────────
+async function loadPwrTpl(){
+  const mode = $('ed-pwr-mode').value;
+  try {
+    const r = await fetch(`/api/power-scada/template?mode=${encodeURIComponent(mode)}`);
+    const j = await r.json();
+    $('ed-pwr-json').value = j.payload ? JSON.stringify(j.payload, null, 2) : `// ${j.error || 'no template'}`;
+    setStatus('ed-pwr-status', 'template loaded', 'ok');
+  } catch (e) { setStatus('ed-pwr-status', e.message, 'err'); }
+}
+async function sendPwrJson(){
+  const mode = $('ed-pwr-mode').value;
+  const raw  = $('ed-pwr-json').value.trim();
+  if (!raw) return setStatus('ed-pwr-status', 'JSON empty', 'err');
+  let payload;
+  try { payload = JSON.parse(raw); } catch (e) { return setStatus('ed-pwr-status', `invalid JSON: ${e.message}`, 'err'); }
+  const r = await fetch('/api/power-scada/publish', {method:'POST', headers:ct(), body:JSON.stringify({mode, payload})});
+  const j = await r.json().catch(()=>({}));
+  setStatus('ed-pwr-status', j.ok ? `sent · mode=${mode}` : `error: ${j.error}`, j.ok ? 'ok' : 'err');
+}
+
+// ── Payload editor: SCADA envelope ─────────────────────────────────
+async function loadScadaTpl(){
+  const kind = $('ed-scada-kind').value;
+  try {
+    const r = await fetch(`/api/scada-envelope/template?kind=${encodeURIComponent(kind)}`);
+    const j = await r.json();
+    $('ed-scada-json').value = j.envelope ? JSON.stringify(j.envelope, null, 2) : `// ${j.error || 'no template'}`;
+    setStatus('ed-scada-status', 'template loaded', 'ok');
+  } catch (e) { setStatus('ed-scada-status', e.message, 'err'); }
+}
+async function sendScadaJson(){
+  const kind = $('ed-scada-kind').value;
+  const raw  = $('ed-scada-json').value.trim();
+  if (!raw) return setStatus('ed-scada-status', 'envelope empty', 'err');
+  let envelope;
+  try { envelope = JSON.parse(raw); } catch (e) { return setStatus('ed-scada-status', `invalid JSON: ${e.message}`, 'err'); }
+  const r = await fetch('/api/scada-publish-raw', {method:'POST', headers:ct(), body:JSON.stringify({kind, envelope})});
+  const j = await r.json().catch(()=>({}));
+  setStatus('ed-scada-status', j.ok ? `sent ${kind}` : `error: ${j.error}`, j.ok ? 'ok' : 'err');
+}
+
+// ── Scenario library (localStorage) ────────────────────────────────
+const SC_KEY = 'scada-scenarios-v1';
+function loadScenarios(){
+  try { return JSON.parse(localStorage.getItem(SC_KEY)) || []; }
+  catch { return []; }
+}
+function persistScenarios(arr){ localStorage.setItem(SC_KEY, JSON.stringify(arr)); }
+function renderScenarios(){
+  const list = $('sc-list');
+  const arr = loadScenarios();
+  list.innerHTML = '';
+  if (!arr.length){
+    list.innerHTML = '<div style="color:var(--dim);font-size:11px;padding:8px;">No saved scenarios yet — fill an editor below, name it, click Save.</div>';
+    return;
+  }
+  arr.forEach((s, i) => {
+    const tag = s.kind === 'tms' ? `TMS · ${s.topic || ''}`
+              : s.kind === 'pwr' ? `PWR · ${s.mode || ''}`
+              : `SCADA · ${s.envKind || ''}`;
+    const div = document.createElement('div');
+    div.style.cssText = 'background:#0a0e16;border:1px solid var(--border);border-radius:6px;padding:8px;cursor:pointer;';
+    div.innerHTML = `
+      <div style="font-weight:600;font-size:12px;margin-bottom:3px;">${escapeHtml(s.name)}</div>
+      <div style="font-size:10px;color:var(--muted);font-family:var(--mono);">${tag}</div>
+      <div style="margin-top:6px;display:flex;gap:4px;">
+        <button class="btn btn-g" style="font-size:10px;padding:2px 6px;flex:1;" onclick="event.stopPropagation();loadScenario(${i})">Load</button>
+        <button class="btn btn-a" style="font-size:10px;padding:2px 6px;flex:1;" onclick="event.stopPropagation();loadAndSend(${i})">Load + Send</button>
+        <button class="btn btn-err" style="font-size:10px;padding:2px 6px;" onclick="event.stopPropagation();deleteScenario(${i})">✕</button>
+      </div>`;
+    div.onclick = () => loadScenario(i);
+    list.appendChild(div);
+  });
+}
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function saveScenario(){
+  const name = $('sc-name').value.trim();
+  const kind = $('sc-kind').value;
+  if (!name) { alert('Give the scenario a name'); return; }
+  let entry;
+  if (kind === 'tms') {
+    entry = {name, kind:'tms', topic: $('ed-tms-topic').value, xml: $('ed-tms-xml').value};
+  } else if (kind === 'pwr') {
+    entry = {name, kind:'pwr', mode: $('ed-pwr-mode').value, json: $('ed-pwr-json').value};
+  } else {
+    entry = {name, kind:'scada', envKind: $('ed-scada-kind').value, json: $('ed-scada-json').value};
+  }
+  const arr = loadScenarios();
+  // replace if same name+kind exists
+  const idx = arr.findIndex(s => s.name === name && s.kind === kind);
+  if (idx >= 0) arr[idx] = entry; else arr.push(entry);
+  persistScenarios(arr);
+  $('sc-name').value = '';
+  renderScenarios();
+}
+function loadScenario(i){
+  const s = loadScenarios()[i];
+  if (!s) return;
+  if (s.kind === 'tms') {
+    $('ed-tms-topic').value = s.topic || $('ed-tms-topic').value;
+    $('ed-tms-xml').value   = s.xml || '';
+    $('ed-tms-xml').scrollIntoView({behavior:'smooth', block:'center'});
+  } else if (s.kind === 'pwr') {
+    $('ed-pwr-mode').value  = s.mode || $('ed-pwr-mode').value;
+    $('ed-pwr-json').value  = s.json || '';
+    $('ed-pwr-json').scrollIntoView({behavior:'smooth', block:'center'});
+  } else {
+    $('ed-scada-kind').value = s.envKind || $('ed-scada-kind').value;
+    $('ed-scada-json').value = s.json || '';
+    $('ed-scada-json').scrollIntoView({behavior:'smooth', block:'center'});
+  }
+}
+async function loadAndSend(i){
+  loadScenario(i);
+  const s = loadScenarios()[i];
+  if (!s) return;
+  if (s.kind === 'tms') await sendTmsXml();
+  else if (s.kind === 'pwr') await sendPwrJson();
+  else await sendScadaJson();
+}
+function deleteScenario(i){
+  const arr = loadScenarios();
+  if (!confirm(`Delete scenario "${arr[i]?.name}"?`)) return;
+  arr.splice(i, 1);
+  persistScenarios(arr);
+  renderScenarios();
+}
+
+reload();
+renderScenarios();
+</script>
+</body>
+</html>

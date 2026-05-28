@@ -40,20 +40,23 @@ spec:
             - containerPort: 8091
               name: http
 
-          # Non-sensitive config
-          env:
-            - name: MQTT_HOST
-              value: "rabbitmq-internal"       # ClusterIP service in same namespace
-            - name: MQTT_PORT
-              value: "1883"
-            - name: MQTT_TOPIC_IN
-              value: "tms/scada/pas"
-            - name: MQTT_TOPIC_OUT
-              value: "scada/tms/alarms"
-            - name: SCADA_CREATOR_ID
-              value: "ScateX"
+          # ── All non-secret env (topics, identity, intervals) ──────
+          # Lives in ConfigMap scada-api-config — edit + apply + restart,
+          # NO image rebuild needed.
+          envFrom:
+            - configMapRef:
+                name: scada-api-config
 
-            # Sensitive config from secret
+          # ── Mount static/ (dashboard.html, power.html) from ConfigMap
+          # Edit the HTML in the repo, regenerate the configmap, restart.
+          # NO image rebuild. Use scripts/apply-static-configmap.sh.
+          volumeMounts:
+            - name: static
+              mountPath: /app/static
+              readOnly: true
+
+          # Sensitive config from secret
+          env:
             - name: MQTT_USER
               valueFrom:
                 secretKeyRef:
@@ -88,6 +91,11 @@ spec:
           resources:
             requests: { memory: "128Mi", cpu: "100m" }
             limits:   { memory: "256Mi", cpu: "250m" }
+
+      volumes:
+        - name: static
+          configMap:
+            name: scada-api-static
 
 ---
 apiVersion: v1

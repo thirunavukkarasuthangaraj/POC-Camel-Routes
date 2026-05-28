@@ -1,0 +1,120 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bridge-appprops
+  namespace: pinkline
+data:
+  # ═══════════════════════════════════════════════════════════════════
+  # FULL application.properties — mounted into the bridge pod and loaded
+  # via SPRING_CONFIG_ADDITIONAL_LOCATION (highest-priority config source
+  # after env vars). Edit topics / sink names / kafka topic names here,
+  # apply, restart pod. NO maven, NO docker rebuild.
+  #
+  #   kubectl -n pinkline apply -f tms/k8s/configmap-appprops.yaml
+  #   kubectl -n pinkline rollout restart deploy/pas-scada-bridge
+  # ═══════════════════════════════════════════════════════════════════
+  application.properties: |
+    # ╔═══════════════════════════════════════════════════════════════╗
+    # ║              PIPELINE BEHAVIOR — CHEAT SHEET                  ║
+    # ╠═══════════════════════════════════════════════════════════════╣
+    # ║  Each flag is one true/false toggle. Edit, apply, restart.    ║
+    # ║                                                                ║
+    # ║  SCADA receiving  (TMS → SCADA)                                ║
+    # ║   xml-to-json : ALWAYS ON  (hardcoded — XML always parsed)    ║
+    # ║   encrypt     : bridge.encrypt.enabled                        ║
+    # ║                                                                ║
+    # ║  SCADA sending    (SCADA → TMS)                                ║
+    # ║   decrypt     : bridge.reverse-kafka.encrypt-enabled          ║
+    # ║   json-to-xml : bridge.reverse-kafka.convert-to-xml           ║
+    # ╚═══════════════════════════════════════════════════════════════╝
+
+
+    # ════════════════════════════════════════════════════════════════
+    #  SECTION 1  ·  TMS  ·  endpoints on the TMS side
+    # ════════════════════════════════════════════════════════════════
+
+    # --- TMS publishes here (bridge consumes — forward path source) ---
+    # Comma-separated. Add/remove entries to start/stop a forward route.
+    bridge.artemis-topics=jms.topic.rcs.e2k.ctc.train.pas,jms.topic.TMS.PISInfo
+
+    # --- TMS subscribes here (bridge writes — reverse path sink) ---
+    bridge.artemis-sink[0].to-topic=SCADA.TMS.Alarms
+
+
+    # ════════════════════════════════════════════════════════════════
+    #  SECTION 2  ·  SCADA SENDING  ·  SCADA → TMS
+    # ════════════════════════════════════════════════════════════════
+
+    # ── Behavior flags ─────────────────────────────────────────────
+    # decrypt: is SCADA's outbound encrypted?
+    #   true  → bridge decrypts incoming SCADA messages
+    #   false → SCADA sends plain JSON, bridge passes through (default)
+    bridge.reverse-kafka.encrypt-enabled=false
+
+    # json-to-xml: convert SCADA's JSON to XML before Artemis?
+    #   true  → bridge converts JSON → XML, TMS reads XML
+    #   false → JSON stays JSON all the way to TMS (default)
+    bridge.reverse-kafka.convert-to-xml=false
+
+    # ── SCADA entry into the pipeline (MQTT → RabbitMQ queue) ──────
+    bridge.scada-source[0].from-exchange=amq.topic
+    bridge.scada-source[0].routing-key=scada.tms.alarms
+    bridge.scada-source[0].queue=scada.tms.alarms.queue
+    bridge.scada-source[0].to-kafka-topic=scada.tms.raw
+
+    # ── Kafka transform stage ──────────────────────────────────────
+    bridge.reverse-kafka.enabled=${BRIDGE_REVERSE_KAFKA_ENABLED:true}
+    bridge.reverse-kafka.input-topic=scada.tms.raw
+    bridge.reverse-kafka.output-topic=scada.tms.processed
+    bridge.reverse-kafka.consumer-group=pas-bridge-reverse
+
+    # ── Final sink (Kafka → Artemis) ───────────────────────────────
+    bridge.artemis-sink[0].from-kafka=scada.tms.processed
+    bridge.artemis-sink[0].consumer-group=pas-bridge-artemis-sink
+
+
+    # ════════════════════════════════════════════════════════════════
+    #  SECTION 3  ·  SCADA RECEIVING  ·  TMS → SCADA
+    # ════════════════════════════════════════════════════════════════
+
+    # ── Behavior flags ─────────────────────────────────────────────
+    # encrypt: encrypt JSON before sending to Kafka?
+    #   true  → AES-256-GCM(JSON) on Kafka/RMQ/MQTT (SCADA must decrypt)
+    #   false → plain JSON on the wire (testing only)
+    bridge.encrypt.enabled=true
+
+    # ── Kafka sink (bridge writes encrypted forward stream here) ──
+    bridge.kafka.topic=tms.scada.encrypted
+
+    # ── RabbitMQ sink ──────────────────────────────────────────────
+    bridge.rabbitmq-out.exchange=amq.topic
+    bridge.rabbitmq-out.routing-key=tms.scada.pas
+
+    # ── MQTT delivery (what SCADA subscribes to) ──────────────────
+    bridge.mqtt.topic=tms/scada/pas
+    bridge.mqtt.qos=1
+    bridge.mqtt.client-id=camel-paho-bridge
+
+    # ── Stage-2 relay (Kafka → RabbitMQ) ──────────────────────────
+    bridge.forward[0].from-kafka=tms.scada.encrypted
+    bridge.forward[0].to-exchange=amq.topic
+    bridge.forward[0].routing-key=tms.scada.pas
+    bridge.forward[0].consumer-group=pas-bridge-consumer
+
+
+    # ════════════════════════════════════════════════════════════════
+    #  COMMON  ·  pipeline + observability
+    # ════════════════════════════════════════════════════════════════
+
+    # --- Pipeline stages enabled (kafka,rabbitmq,mqtt — any subset) ---
+    bridge.pipeline=${BRIDGE_PIPELINE:kafka}
+
+    # --- Compacted alarm-state topic (for /api/snapshot/replay) ---
+    bridge.alarm-state.enabled=${BRIDGE_ALARM_STATE_ENABLED:true}
+    bridge.alarm-state.topic=scada.tms.alarms.state
+
+    # --- In-bridge monitor API (/api/messages) — optional ---
+    bridge.monitor.enabled=${BRIDGE_MONITOR_ENABLED:false}
+    bridge.monitor.from-exchange=amq.topic
+    bridge.monitor.routing-key=tms.scada.pas
+    bridge.monitor.queue=scada.monitor.queue

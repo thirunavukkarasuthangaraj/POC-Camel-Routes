@@ -32,10 +32,23 @@ spec:
             - configMapRef:
                 name: bridge-config
 
+          # ── Mounted application.properties (all topics/sinks live here)
+          # ConfigMap bridge-appprops → /app/config/application.properties
+          # Spring loads it via SPRING_CONFIG_ADDITIONAL_LOCATION below,
+          # so any edit + apply + rollout restart picks up new topics
+          # with NO image rebuild.
+          volumeMounts:
+            - name: appprops
+              mountPath: /app/config/application.properties
+              subPath: application.properties
+              readOnly: true
+
           # ── Sensitive config from Secret ─────────────────
           # Provides: ARTEMIS_USER/PASS, RABBITMQ_USER/PASS,
           #           MQTT_USER/PASS, SCADA_AES_KEY
           env:
+            - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+              value: "file:/app/config/application.properties"
             - name: SCADA_AES_KEY
               valueFrom:
                 secretKeyRef:
@@ -105,8 +118,15 @@ spec:
               memory: "512Mi"
               cpu: "500m"
 
+      volumes:
+        - name: appprops
+          configMap:
+            name: bridge-appprops
+            items:
+              - key: application.properties
+                path: application.properties
+
       # TLS volume — DevOps will uncomment when ready:
-      # volumes:
       #   - name: truststore
       #     secret:
       #       secretName: bridge-tls-truststore
