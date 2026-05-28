@@ -26,3 +26,8 @@ __pycache__/
 
 # Logs
 *.log
+
+# Docker image artifacts (use ACR/registry instead of committing tars)
+*.tar
+docker
+

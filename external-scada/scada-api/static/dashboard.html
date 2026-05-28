@@ -46,7 +46,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--font);font-size:13p
 /* ── Flow diagram ── */
 .flow-wrap{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 20px 8px;}
 .flow-svg{width:100%;max-width:1200px;margin:0 auto;display:block;}
-.fnode rect{fill:#0b1526;stroke:var(--border2);stroke-width:1.5;rx:6;}
+.fnode rect{fill:var(--bg-soft,#fafafa);stroke:var(--border2);stroke-width:1.5;rx:6;}
 .fnode.active rect{stroke:var(--ok);filter:drop-shadow(0 0 5px #10b98150);}
 .fnode.fail rect{stroke:var(--err);filter:drop-shadow(0 0 5px #ef444450);}
 .flabel{font:600 11px var(--font);fill:var(--txt);}
@@ -130,11 +130,11 @@ textarea{font-family:var(--mono);font-size:11px;resize:vertical;}
 .mbox-tags{padding:0 14px 8px;display:flex;gap:5px;flex-wrap:wrap;}
 .badge{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:4px;
        font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;}
-.badge.in           {background:#0d2d45;color:#38bdf8;}
-.badge.UpdateAlarm  {background:#451a03;color:#fde68a;}
-.badge.KeepAlive    {background:#022c22;color:#6ee7b7;}
-.badge.SendAllAlarms{background:#2e1065;color:#c4b5fd;}
-.badge.GetAllAlarms {background:#0c2a4a;color:#7dd3fc;}
+.badge.in           {background:#dbeafe;color:#1d4ed8;}
+.badge.UpdateAlarm  {background:#fef3c7;color:#92400e;}
+.badge.KeepAlive    {background:#dcfce7;color:#15803d;}
+.badge.SendAllAlarms{background:#ede9fe;color:#6d28d9;}
+.badge.GetAllAlarms {background:#dbeafe;color:#1d4ed8;}
 .mbox-body{padding:10px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:5px;max-height:52vh;}
 
 /* ── Empty state ── */
@@ -153,7 +153,7 @@ textarea{font-family:var(--mono);font-size:11px;resize:vertical;}
 .msg.out.GetAllAlarms {border-left-color:var(--ga);}
 .msg-row{display:flex;justify-content:space-between;align-items:center;padding:5px 9px 4px;gap:8px;}
 .msg-time{color:var(--muted);font-size:10px;font-family:var(--mono);white-space:nowrap;}
-.msg-body-txt{font-family:var(--mono);font-size:10px;color:#7a9ab8;
+.msg-body-txt{font-family:var(--mono);font-size:10px;color:#475569;
               padding:0 9px 7px;max-height:100px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;}
 
 /* ── Bottom row ── */
@@ -206,27 +206,8 @@ td.s2{color:var(--warn);}
   --font:         'IBM Plex Sans', system-ui, -apple-system, sans-serif;
   --mono:         'IBM Plex Mono', ui-monospace, monospace;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg:           #0b0b0b;
-    --bg-soft:      #131313;
-    --surface:      #131313;
-    --border:       #1f1f1f;
-    --border2:      #2a2a2a;
-    --txt:          #ededed;
-    --muted:        #a3a3a3;
-    --dim:          #525252;
-    --accent:       #ededed;
-    --ok:           #4ade80;
-    --err:          #f87171;
-    --warn:         #facc15;
-    --ua:           #f59e0b;
-    --ka:           #4ade80;
-    --sa:           #a78bfa;
-    --ga:           #60a5fa;
-    --in-clr:       #60a5fa;
-  }
-}
+/* Light mode forced — dark-mode media query removed so OS dark mode
+   doesn't flip the dashboard back to dark. */
 
 body { font-size: 14px; -webkit-font-smoothing: antialiased; }
 
@@ -543,163 +524,6 @@ pre, code, .json {
   </svg>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════════════
-     END-TO-END PROTOCOL REFERENCE — for client showcase
-     Lists every hop, topic, format, and encryption boundary
-     ══════════════════════════════════════════════════════════════════ -->
-<div class="e2e-panel" id="e2e-panel">
-  <div class="e2e-hdr">
-    <h3>End-to-End Pipeline — Topics, Protocols & Encryption</h3>
-    <button class="e2e-toggle" onclick="toggleE2E()" id="e2e-toggle-btn">Hide details ▴</button>
-  </div>
-
-  <div class="e2e-body" id="e2e-body">
-
-    <!-- ── Forward (TMS → SCADA) ── -->
-    <div class="e2e-row">
-      <div class="e2e-dir fwd">▶ Forward · TMS → SCADA</div>
-      <div class="e2e-hops">
-        <div class="hop">
-          <div class="hop-name">1. TMS Artemis</div>
-          <div class="hop-proto">OpenWire / JMS · :61616</div>
-          <div class="hop-topic">jms.topic.rcs.e2k.ctc.train.pas<br>jms.topic.TMS.PISInfo</div>
-          <div class="hop-fmt">XML (plain)</div>
-        </div>
-        <div class="hop-arrow fwd">→</div>
-        <div class="hop">
-          <div class="hop-name">2. Bridge (Camel)</div>
-          <div class="hop-proto">XML→JSON · AES-256-GCM</div>
-          <div class="hop-topic">EncryptProcessor</div>
-          <div class="hop-fmt">JSON → ciphertext</div>
-          <div class="hop-tag enc">🔒 encrypt</div>
-        </div>
-        <div class="hop-arrow fwd">→</div>
-        <div class="hop">
-          <div class="hop-name">3. Kafka</div>
-          <div class="hop-proto">Kafka · :9092</div>
-          <div class="hop-topic">tms.scada.encrypted</div>
-          <div class="hop-fmt">base64(iv+ct+tag)</div>
-        </div>
-        <div class="hop-arrow fwd">→</div>
-        <div class="hop">
-          <div class="hop-name">4. RabbitMQ</div>
-          <div class="hop-proto">AMQP · :5672</div>
-          <div class="hop-topic">amq.topic<br>key: tms.scada.pas</div>
-          <div class="hop-fmt">passthrough</div>
-        </div>
-        <div class="hop-arrow fwd">→</div>
-        <div class="hop">
-          <div class="hop-name">5. MQTT</div>
-          <div class="hop-proto">MQTT · :1883</div>
-          <div class="hop-topic">tms/scada/pas</div>
-          <div class="hop-fmt">RMQ MQTT plugin</div>
-        </div>
-        <div class="hop-arrow fwd">→</div>
-        <div class="hop">
-          <div class="hop-name">6. SCADA API</div>
-          <div class="hop-proto">Flask · decrypt</div>
-          <div class="hop-topic">AESGCM(key, iv)</div>
-          <div class="hop-fmt">JSON (plain)</div>
-          <div class="hop-tag dec">🔓 decrypt</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Reverse (SCADA → TMS) ── -->
-    <div class="e2e-row rev">
-      <div class="e2e-dir rev">◀ Reverse · SCADA → TMS</div>
-      <div class="e2e-hops">
-        <div class="hop">
-          <div class="hop-name">1. SCADA API</div>
-          <div class="hop-proto">Flask · RSAE envelope</div>
-          <div class="hop-topic">4 types: UpdateAlarm, KeepAlive,<br>SendAllAlarms, GetAllAlarms</div>
-          <div class="hop-fmt">JSON (plain by default)</div>
-        </div>
-        <div class="hop-arrow rev">→</div>
-        <div class="hop">
-          <div class="hop-name">2. MQTT</div>
-          <div class="hop-proto">MQTT · :1883</div>
-          <div class="hop-topic">scada/tms/alarms</div>
-          <div class="hop-fmt">JSON</div>
-        </div>
-        <div class="hop-arrow rev">→</div>
-        <div class="hop">
-          <div class="hop-name">3. RabbitMQ</div>
-          <div class="hop-proto">AMQP · :5672</div>
-          <div class="hop-topic">amq.topic<br>key: scada.tms.alarms<br>queue: scada.tms.alarms.queue</div>
-          <div class="hop-fmt">JSON</div>
-        </div>
-        <div class="hop-arrow rev">→</div>
-        <div class="hop">
-          <div class="hop-name">4. Bridge (Camel)</div>
-          <div class="hop-proto">RMQ→Kafka→decrypt→Kafka</div>
-          <div class="hop-topic">scada.tms.raw<br>→ scada.tms.processed</div>
-          <div class="hop-fmt">JSON (pass)</div>
-        </div>
-        <div class="hop-arrow rev">→</div>
-        <div class="hop">
-          <div class="hop-name">5. TMS Artemis</div>
-          <div class="hop-proto">OpenWire / JMS · :61616</div>
-          <div class="hop-topic">SCADA.TMS.Alarms</div>
-          <div class="hop-fmt">TextMessage(JSON)</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Encryption + format quick legend ── -->
-    <div class="e2e-legend">
-      <div class="lg-item"><span class="lg-chip enc">🔒 AES-256-GCM</span> 12-byte IV · 16-byte auth tag · base64-encoded · key shared via <code>SCADA_AES_KEY</code></div>
-      <div class="lg-item"><span class="lg-chip fmt">XML→JSON</span> Jackson XmlMapper at bridge ingress (forward path)</div>
-      <div class="lg-item"><span class="lg-chip fmt">RSAE</span> envelope schema for reverse path: <code>{CreatorId, Type, Timestamp, ...}</code></div>
-      <div class="lg-item"><span class="lg-chip tms">Send-all flow</span> SCADA → MQTT <code>scada/tms/alarms</code> with <code>Type:SendAllAlarms</code> → bridge → Artemis <code>SCADA.TMS.Alarms</code> in one envelope carrying <code>Alarms:[]</code> array</div>
-    </div>
-
-  </div>
-</div>
-
-<style>
-.e2e-panel{background:var(--panel,#10151f);border:1px solid var(--border,#1d2533);border-radius:8px;margin:12px 14px;overflow:hidden;}
-.e2e-hdr{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#0d121b;border-bottom:1px solid var(--border,#1d2533);}
-.e2e-hdr h3{margin:0;font-size:13px;font-weight:600;color:var(--text,#cfd6e4);letter-spacing:.3px;}
-.e2e-toggle{background:#1f2937;color:#cfd6e4;border:1px solid var(--border,#1d2533);border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer;}
-.e2e-body{padding:12px 14px;}
-.e2e-row{margin-bottom:14px;}
-.e2e-row.rev{margin-bottom:6px;}
-.e2e-dir{font-size:11px;font-weight:700;letter-spacing:.5px;margin-bottom:6px;padding:3px 8px;display:inline-block;border-radius:4px;}
-.e2e-dir.fwd{color:#38bdf8;background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.3);}
-.e2e-dir.rev{color:#a78bfa;background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.3);}
-.e2e-hops{display:flex;align-items:stretch;gap:4px;overflow-x:auto;padding-bottom:4px;}
-.hop{flex:1;min-width:130px;background:#0a0e16;border:1px solid var(--border,#1d2533);border-radius:6px;padding:8px;position:relative;}
-.hop-name{font-size:11px;font-weight:700;color:#cfd6e4;margin-bottom:3px;}
-.hop-proto{font-size:9px;color:#7c869b;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;}
-.hop-topic{font-family:"JetBrains Mono","Fira Code",Consolas,monospace;font-size:10px;color:#5fb1ff;line-height:1.4;word-break:break-all;}
-.hop-fmt{font-size:9px;color:#7c869b;margin-top:5px;font-style:italic;}
-.hop-tag{position:absolute;top:6px;right:6px;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:600;}
-.hop-tag.enc{background:rgba(251,146,60,.15);color:#fb923c;border:1px solid rgba(251,146,60,.4);}
-.hop-tag.dec{background:rgba(34,197,94,.15);color:#22c55e;border:1px solid rgba(34,197,94,.4);}
-.hop-arrow{display:flex;align-items:center;font-size:20px;font-weight:700;padding:0 2px;}
-.hop-arrow.fwd{color:#38bdf8;}
-.hop-arrow.rev{color:#a78bfa;}
-.e2e-legend{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border,#1d2533);}
-@media (max-width:900px){.e2e-legend{grid-template-columns:1fr;}}
-.lg-item{font-size:11px;color:#cfd6e4;line-height:1.5;}
-.lg-chip{display:inline-block;font-size:10px;font-weight:600;padding:2px 7px;border-radius:3px;margin-right:6px;font-family:"JetBrains Mono",monospace;}
-.lg-chip.enc{background:rgba(251,146,60,.15);color:#fb923c;}
-.lg-chip.fmt{background:rgba(95,177,255,.15);color:#5fb1ff;}
-.lg-chip.tms{background:rgba(167,139,250,.15);color:#a78bfa;}
-.lg-item code{font-size:10px;color:#aab3c5;background:#0f1622;padding:1px 4px;border-radius:2px;}
-</style>
-
-<script>
-function toggleE2E(){
-  const body = document.getElementById('e2e-body');
-  const btn  = document.getElementById('e2e-toggle-btn');
-  const open = body.style.display !== 'none';
-  body.style.display = open ? 'none' : '';
-  btn.textContent = open ? 'Show details ▾' : 'Hide details ▴';
-}
-</script>
-
 <!-- ── Type counter strip ── -->
 <div class="type-strip">
   <div class="type-card">
@@ -750,12 +574,14 @@ function toggleE2E(){
     <div class="cfg-card">
       <div class="cfg-field">
         <label>Topic</label>
-        <select id="tms-pub-topic">
-          <option value="TMS.PISInfo">TMS.PISInfo</option>
-          <option value="RCS.E2K.TMS.TrafficReportClient">RCS.E2K.TMS.TrafficReportClient</option>
-          <option value="TSInfo">TSInfo</option>
-          <option value="RCS.E2K.TMS.RouteInfo">RCS.E2K.TMS.RouteInfo</option>
-        </select>
+        <input type="text" id="tms-pub-topic" list="tms-pub-suggestions" value="jms.topic.TMS.PISInfo" placeholder="jms.topic.X — must match bridge allow-list">
+        <datalist id="tms-pub-suggestions">
+          <option value="jms.topic.TMS.PISInfo"></option>
+          <option value="jms.topic.rcs.e2k.ctc.train.pas"></option>
+          <option value="jms.topic.RCS.E2K.TMS.TrafficReportClient"></option>
+          <option value="jms.topic.TSInfo"></option>
+          <option value="jms.topic.RCS.E2K.TMS.RouteInfo"></option>
+        </datalist>
       </div>
       <div class="cfg-field" style="max-width:160px;">
         <label>Interval (seconds)</label>

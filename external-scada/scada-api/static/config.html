@@ -5,20 +5,20 @@
 <title>SCADA — Config & Save</title>
 <style>
   :root{
-    --bg:#0a0e16; --panel:#10151f; --border:#1d2533; --muted:#7c869b;
-    --dim:#5a6478; --text:#cfd6e4; --accent:#5fb1ff; --ok:#4ade80; --err:#f87171;
-    --ua:#fb923c; --ka:#22d3ee; --sa:#a78bfa; --ga:#fde047;
+    --bg:#ffffff; --panel:#fafafa; --border:#e5e5e5; --muted:#525252;
+    --dim:#a3a3a3; --text:#171717; --accent:#1d4ed8; --ok:#15803d; --err:#b91c1c;
+    --ua:#b45309; --ka:#0e7490; --sa:#6d28d9; --ga:#a16207;
     --mono:"JetBrains Mono","Fira Code",Consolas,monospace;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);font:13px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;}
   a{color:var(--accent);text-decoration:none}
-  code{font-family:var(--mono);background:#0f1622;padding:1px 5px;border-radius:3px;color:#aab3c5;font-size:11px}
+  code{font-family:var(--mono);background:#f1f5f9;padding:1px 5px;border-radius:3px;color:#334155;font-size:11px}
 
-  .topnav{display:flex;align-items:center;gap:14px;padding:10px 16px;background:#0d121b;border-bottom:1px solid var(--border);}
+  .topnav{display:flex;align-items:center;gap:14px;padding:10px 16px;background:#ffffff;border-bottom:1px solid var(--border);}
   .topnav h1{margin:0;font-size:16px;font-weight:600;letter-spacing:.3px;}
   .tabs{display:flex;gap:4px;margin-left:auto;}
-  .tab{padding:6px 14px;border-radius:6px;background:#0f1622;color:var(--muted);font-size:12px;cursor:pointer;border:1px solid var(--border);}
+  .tab{padding:6px 14px;border-radius:6px;background:#f1f5f9;color:var(--muted);font-size:12px;cursor:pointer;border:1px solid var(--border);}
   .tab.active{background:var(--accent);color:#04101e;font-weight:600;border-color:var(--accent);}
   .tab:hover{color:var(--text);}
 
@@ -32,7 +32,7 @@
 
   label{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;}
   input[type=text],input[type=number],select,textarea{
-    width:100%;padding:6px 8px;background:#0a0e16;border:1px solid var(--border);color:var(--text);
+    width:100%;padding:6px 8px;background:#ffffff;border:1px solid var(--border);color:var(--text);
     border-radius:4px;font-size:12px;font-family:inherit;
   }
   textarea{font-family:var(--mono);font-size:11px;resize:vertical;}
@@ -43,7 +43,7 @@
 
   .timer-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
   @media (max-width:700px){.timer-grid{grid-template-columns:repeat(2,1fr);}}
-  .timer-cell{background:#0a0e16;border:1px solid var(--border);border-radius:6px;padding:8px;}
+  .timer-cell{background:#ffffff;border:1px solid var(--border);border-radius:6px;padding:8px;}
   .timer-cell-label{font-size:11px;font-weight:600;margin-bottom:6px;}
   .timer-cell .row{gap:4px;}
   .timer-cell input[type=number]{width:60px;}
@@ -51,7 +51,7 @@
 
   .btn{padding:6px 14px;border:0;border-radius:4px;cursor:pointer;font-size:12px;font-weight:500;font-family:inherit;}
   .btn-a{background:var(--accent);color:#04101e;}
-  .btn-g{background:#1f2937;color:var(--text);border:1px solid var(--border);}
+  .btn-g{background:#f1f5f9;color:var(--text);border:1px solid var(--border);}
   .btn-err{background:var(--err);color:#04101e;}
   .btn:hover{filter:brightness(1.1);}
 
@@ -61,7 +61,7 @@
   .save-status.err{color:var(--err);}
 
   .help{font-size:11px;color:var(--muted);margin-top:4px;}
-  .badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-family:var(--mono);background:#0f1622;color:#aab3c5;}
+  .badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-family:var(--mono);background:#f1f5f9;color:#334155;}
 </style>
 </head>
 <body>
@@ -162,13 +162,15 @@ DOOR_PLT_2_3
 
       <!-- TMS XML editor -->
       <div>
-        <label>TMS Publisher · Topic</label>
-        <select id="ed-tms-topic">
-          <option>TMS.PISInfo</option>
-          <option>RCS.E2K.TMS.TrafficReportClient</option>
-          <option>TSInfo</option>
-          <option>RCS.E2K.TMS.RouteInfo</option>
-        </select>
+        <label>TMS Publisher · Topic <small style="color:var(--muted);font-weight:400;">(editable — must match bridge allow-list)</small></label>
+        <input type="text" id="ed-tms-topic" list="tms-topic-suggestions" value="jms.topic.TMS.PISInfo" placeholder="jms.topic.TMS.PISInfo">
+        <datalist id="tms-topic-suggestions">
+          <option value="jms.topic.TMS.PISInfo"></option>
+          <option value="jms.topic.rcs.e2k.ctc.train.pas"></option>
+          <option value="jms.topic.RCS.E2K.TMS.TrafficReportClient"></option>
+          <option value="jms.topic.TSInfo"></option>
+          <option value="jms.topic.RCS.E2K.TMS.RouteInfo"></option>
+        </datalist>
         <label style="margin-top:8px;">XML payload</label>
         <textarea id="ed-tms-xml" rows="10" placeholder="<TMSPISInfo>...</TMSPISInfo>"></textarea>
         <div class="row" style="margin-top:6px;">
@@ -180,13 +182,14 @@ DOOR_PLT_2_3
 
       <!-- Power JSON editor -->
       <div>
-        <label>Power SCADA · Mode</label>
-        <select id="ed-pwr-mode">
-          <option value="mixed">mixed</option>
+        <label>Power SCADA · Mode <small style="color:var(--muted);font-weight:400;">(editable)</small></label>
+        <input type="text" id="ed-pwr-mode" list="pwr-mode-suggestions" value="mixed" placeholder="mixed">
+        <datalist id="pwr-mode-suggestions">
+          <option value="mixed">mixed (70% on / 20% off / 10% err)</option>
           <option value="random">random</option>
           <option value="all_on">all_on</option>
           <option value="all_off">all_off</option>
-        </select>
+        </datalist>
         <label style="margin-top:8px;">JSON payload</label>
         <textarea id="ed-pwr-json" rows="10" placeholder='{"timestamp":"...","segments":[...]}'></textarea>
         <div class="row" style="margin-top:6px;">
@@ -198,13 +201,14 @@ DOOR_PLT_2_3
 
       <!-- SCADA → TMS envelope editor -->
       <div style="grid-column:1/-1;">
-        <label>SCADA → TMS · Envelope type</label>
-        <select id="ed-scada-kind" style="max-width:240px;">
-          <option>UpdateAlarm</option>
-          <option>KeepAlive</option>
-          <option>SendAllAlarms</option>
-          <option>GetAllAlarms</option>
-        </select>
+        <label>SCADA → TMS · Envelope type <small style="color:var(--muted);font-weight:400;">(editable — type custom Type if needed)</small></label>
+        <input type="text" id="ed-scada-kind" list="scada-kind-suggestions" value="UpdateAlarm" style="max-width:240px;" placeholder="UpdateAlarm">
+        <datalist id="scada-kind-suggestions">
+          <option value="UpdateAlarm"></option>
+          <option value="KeepAlive"></option>
+          <option value="SendAllAlarms"></option>
+          <option value="GetAllAlarms"></option>
+        </datalist>
         <label style="margin-top:8px;">RSAE envelope JSON</label>
         <textarea id="ed-scada-json" rows="10" placeholder='{"CreatorId":"ScateX","Type":"UpdateAlarm",...}'></textarea>
         <div class="row" style="margin-top:6px;">
@@ -365,7 +369,7 @@ function renderScenarios(){
               : s.kind === 'pwr' ? `PWR · ${s.mode || ''}`
               : `SCADA · ${s.envKind || ''}`;
     const div = document.createElement('div');
-    div.style.cssText = 'background:#0a0e16;border:1px solid var(--border);border-radius:6px;padding:8px;cursor:pointer;';
+    div.style.cssText = 'background:#ffffff;border:1px solid var(--border);border-radius:6px;padding:8px;cursor:pointer;';
     div.innerHTML = `
       <div style="font-weight:600;font-size:12px;margin-bottom:3px;">${escapeHtml(s.name)}</div>
       <div style="font-size:10px;color:var(--muted);font-family:var(--mono);">${tag}</div>

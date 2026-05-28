@@ -531,19 +531,28 @@ tms_pub = {
     "last_error": None,
 }
 TMS_TOPICS = [
-    "TMS.PISInfo",
-    "RCS.E2K.TMS.TrafficReportClient",
-    "TSInfo",
-    "RCS.E2K.TMS.RouteInfo",
+    "jms.topic.TMS.PISInfo",
+    "jms.topic.RCS.E2K.TMS.TrafficReportClient",
+    "jms.topic.TSInfo",
+    "jms.topic.RCS.E2K.TMS.RouteInfo",
+    "jms.topic.rcs.e2k.ctc.train.pas",
 ]
+
+def _short_topic(t: str) -> str:
+    """Strip jms.topic. prefix to look up the right XML template generator."""
+    return t.split(".", 2)[2] if t.startswith("jms.topic.") else t
 
 def _tms_xml(topic: str) -> str:
     """Generate REALISTIC XML matching the actual TMS schema each topic
     uses, so the bridge's XmlToJsonProcessor produces meaningful JSON
     that matches the production wire format.
 
+    Topic name may be the full `jms.topic.X` (preferred — matches bridge
+    allow-list) or just `X`; both are handled.
+
     Schemas come from the Java POJOs in
     tms/src/main/java/com/pinkline/kafkabridge/model/."""
+    topic = _short_topic(topic)
     now = datetime.now(timezone.utc)
     ts_compact   = now.strftime("%Y%m%dT%H%M%S")             # 20260430T143012
     ts_iso       = now.strftime("%Y-%m-%dT%H:%M:%S.000Z")    # ISO8601
@@ -674,12 +683,11 @@ threading.Thread(target=_tms_publish_loop, daemon=True, name="tms-publisher").st
 @app.route("/api/tms-publish", methods=["POST"])
 def api_tms_publish_now():
     """Manual one-shot publish. Body: {"topic": "...", "xml": "..."}.
-    Both fields optional — defaults to current toggle topic + synthesized XML."""
+    Both fields optional — defaults to current toggle topic + synthesized XML.
+    Topic is free-form (UI lets users type custom topics for testing)."""
     body = request.get_json(silent=True) or {}
     topic = body.get("topic") or tms_pub["topic"]
-    xml = body.get("xml") or _tms_xml(topic)
-    if topic not in TMS_TOPICS:
-        return jsonify({"ok": False, "error": "unknown topic", "allowed": TMS_TOPICS}), 400
+    xml = body.get("xml") or _tms_xml(topic if topic in TMS_TOPICS else "TMS.PISInfo")
     try:
         _tms_publish(topic, xml)
         return jsonify({"ok": True, "topic": topic, "sent": tms_pub["sent"]})
@@ -698,8 +706,8 @@ def api_tms_publish_config():
     if "interval_s" in body:
         try: tms_pub["interval_s"] = max(1, int(body["interval_s"]))
         except Exception: pass
-    if "topic" in body and body["topic"] in TMS_TOPICS:
-        tms_pub["topic"] = body["topic"]
+    if "topic" in body and body["topic"]:
+        tms_pub["topic"] = body["topic"]   # free-form, accept any topic name
     return jsonify(tms_pub)
 
 
@@ -713,10 +721,10 @@ def api_tms_publish_template():
     """Return an auto-generated XML template for a topic — used by the config
     editor to pre-fill the textarea, then user edits + sends scenarios."""
     topic = request.args.get("topic", tms_pub["topic"])
-    if topic not in TMS_TOPICS:
-        return jsonify({"ok": False, "error": "unknown topic", "allowed": TMS_TOPICS}), 400
+    # Free-form: fall back to PISInfo template for unknown topics (UI may type any topic)
+    template_topic = topic if topic in TMS_TOPICS else "TMS.PISInfo"
     try:
-        return jsonify({"ok": True, "topic": topic, "xml": _tms_xml(topic)})
+        return jsonify({"ok": True, "topic": topic, "xml": _tms_xml(template_topic)})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
