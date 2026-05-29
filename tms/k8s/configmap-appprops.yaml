@@ -20,7 +20,7 @@ data:
     # ║  Each flag is one true/false toggle. Edit, apply, restart.    ║
     # ║                                                                ║
     # ║  SCADA receiving  (TMS → SCADA)                                ║
-    # ║   xml-to-json : ALWAYS ON  (hardcoded — XML always parsed)    ║
+    # ║   xml-to-json : bridge.convert-xml-to-json                    ║
     # ║   encrypt     : bridge.encrypt.enabled                        ║
     # ║                                                                ║
     # ║  SCADA sending    (SCADA → TMS)                                ║
@@ -78,10 +78,15 @@ data:
     # ════════════════════════════════════════════════════════════════
 
     # ── Behavior flags ─────────────────────────────────────────────
-    # encrypt: encrypt JSON before sending to Kafka?
-    #   true  → AES-256-GCM(JSON) on Kafka/RMQ/MQTT (SCADA must decrypt)
-    #   false → plain JSON on the wire (testing only)
-    bridge.encrypt.enabled=true
+    # xml-to-json: convert TMS's incoming XML to JSON before sending?
+    #   true  → bridge converts XML → JSON, SCADA receives JSON (default)
+    #   false → raw XML forwarded through untouched, SCADA receives XML
+    bridge.convert-xml-to-json=true
+
+    # encrypt: encrypt before sending to Kafka?
+    #   true  → AES-256-GCM(payload) on Kafka/RMQ/MQTT (SCADA must decrypt)
+    #   false → plain payload on the wire (testing only)
+    bridge.encrypt.enabled=false
 
     # ── Kafka sink (bridge writes encrypted forward stream here) ──
     bridge.kafka.topic=tms.scada.encrypted

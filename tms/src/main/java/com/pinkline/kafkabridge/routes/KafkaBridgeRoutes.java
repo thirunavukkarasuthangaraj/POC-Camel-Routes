@@ -102,8 +102,14 @@ public class KafkaBridgeRoutes extends RouteBuilder {
             RouteDefinition route = from("activemq:topic:" + topic)
                 .routeId(routeId)
                 .log("← Artemis [" + topic + "] — pipeline: " + config.getPipeline()
-                        + " | encrypt: " + config.getEncrypt().isEnabled())
-                .process(new XmlToJsonProcessor());
+                        + " | encrypt: " + config.getEncrypt().isEnabled()
+                        + " | xml→json: " + config.isConvertXmlToJson());
+
+            if (config.isConvertXmlToJson()) {
+                route.process(new XmlToJsonProcessor());
+            } else {
+                route.log("XML→JSON disabled — raw XML forwarded");
+            }
 
             if (config.getEncrypt().isEnabled()) {
                 route.process(new EncryptProcessor());
@@ -179,8 +185,13 @@ public class KafkaBridgeRoutes extends RouteBuilder {
                         + " | encrypt: " + config.getEncrypt().isEnabled())
                 // Kafka delivers byte[] — convert to String for XmlToJsonProcessor
                 .process(e -> e.getIn().setBody(
-                        new String(e.getIn().getBody(byte[].class), StandardCharsets.UTF_8)))
-                .process(new XmlToJsonProcessor());
+                        new String(e.getIn().getBody(byte[].class), StandardCharsets.UTF_8)));
+
+            if (config.isConvertXmlToJson()) {
+                route.process(new XmlToJsonProcessor());
+            } else {
+                route.log("XML→JSON disabled — raw XML forwarded");
+            }
 
             if (config.getEncrypt().isEnabled()) {
                 route.process(new EncryptProcessor());

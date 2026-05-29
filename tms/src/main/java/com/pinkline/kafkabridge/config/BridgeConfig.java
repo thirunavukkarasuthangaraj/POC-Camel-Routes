@@ -66,6 +66,11 @@ public class BridgeConfig {
     // ── Pipeline: ordered sink list ───────────────────────────────
     private String pipeline = "kafka,rabbitmq,mqtt";
 
+    // ── Forward path (TMS → SCADA) XML→JSON toggle ────────────────
+    // true  → convert incoming TMS XML to JSON before sending (default)
+    // false → forward the raw XML through untouched
+    private boolean convertXmlToJson = true;
+
     // ── Encryption ────────────────────────────────────────────────
     private Encrypt encrypt = new Encrypt();
 
@@ -112,6 +117,9 @@ public class BridgeConfig {
 
     public String getPipeline() { return pipeline; }
     public void setPipeline(String pipeline) { this.pipeline = pipeline; }
+
+    public boolean isConvertXmlToJson() { return convertXmlToJson; }
+    public void setConvertXmlToJson(boolean convertXmlToJson) { this.convertXmlToJson = convertXmlToJson; }
 
     public Encrypt getEncrypt() { return encrypt; }
     public void setEncrypt(Encrypt encrypt) { this.encrypt = encrypt; }
