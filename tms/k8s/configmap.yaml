@@ -14,6 +14,10 @@ data:
   # camel.component.activemq.broker-url = tcp://${ARTEMIS_HOST}:${ARTEMIS_PORT}
   ARTEMIS_HOST: "10.4.1.28"
   ARTEMIS_PORT: "61616"
+  # For TLS acceptors (Azure): set scheme to ssl, point PORT at the TLS
+  # acceptor (often 61617), set TLS_TRUSTSTORE_PATH below, and create the
+  # bridge-tls-truststore Secret (see deployment.yaml volumes comment).
+  # ARTEMIS_SCHEME: "ssl"
 
   # ── Kafka (IN-CLUSTER: same namespace, Service DNS) ────────────────
   # kafka.brokers = ${KAFKA_HOST}:${KAFKA_PORT}
@@ -45,5 +49,7 @@ data:
   # Do NOT set BRIDGE_ARTEMISTOPICS here — env vars override the mounted
   # file and create a confusing dual source of truth.
 
-  # ── TLS (uncomment when DevOps mounts the truststore Secret) ───────
+  # ── TLS (uncomment together with ARTEMIS_SCHEME above; the truststore
+  # Secret bridge-tls-truststore must contain truststore.jks, and
+  # bridge-secret needs a TLS_TRUSTSTORE_PASS key) ────────────────────
   # TLS_TRUSTSTORE_PATH: "/etc/ssl/bridge/truststore.jks"

@@ -42,6 +42,11 @@ spec:
               mountPath: /app/config/application.properties
               subPath: application.properties
               readOnly: true
+            # TLS truststore (Secret bridge-tls-truststore; optional —
+            # mounts empty when the secret doesn't exist, e.g. local)
+            - name: truststore
+              mountPath: /etc/ssl/bridge
+              readOnly: true
 
           # ── Sensitive config from Secret ─────────────────
           # Provides: ARTEMIS_USER/PASS, RABBITMQ_USER/PASS,
@@ -84,12 +89,13 @@ spec:
                 secretKeyRef:
                   name: bridge-secret
                   key: MQTT_PASS
-
-          # TLS volume — DevOps will uncomment when ready:
-          # volumeMounts:
-          #   - name: truststore
-          #     mountPath: /etc/ssl/bridge
-          #     readOnly: true
+            # Truststore password — optional so non-TLS envs don't need the key
+            - name: TLS_TRUSTSTORE_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: bridge-secret
+                  key: TLS_TRUSTSTORE_PASS
+                  optional: true
 
           # ── Health checks ─────────────────────────────────
           livenessProbe:
@@ -125,11 +131,16 @@ spec:
             items:
               - key: application.properties
                 path: application.properties
-
-      # TLS volume — DevOps will uncomment when ready:
-      #   - name: truststore
-      #     secret:
-      #       secretName: bridge-tls-truststore
+        # TLS truststore — optional: pods still start where the secret
+        # doesn't exist (mounts as empty dir); create it for TLS brokers:
+        #   keytool -importcert -alias artemis -file broker.pem \
+        #     -keystore truststore.jks -storepass <pass> -noprompt
+        #   kubectl -n pinkline create secret generic bridge-tls-truststore \
+        #     --from-file=truststore.jks
+        - name: truststore
+          secret:
+            secretName: bridge-tls-truststore
+            optional: true
 
 ---
 apiVersion: v1
